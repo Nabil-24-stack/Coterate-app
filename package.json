@@ -1,0 +1,11 @@
+{
+  "name": "coterate-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "cd coterate && npm start",
+    "build": "cd coterate && npm install && npm run build",
+    "test": "cd coterate && npm test",
+    "eject": "cd coterate && npm run eject"
+  }
+} 
