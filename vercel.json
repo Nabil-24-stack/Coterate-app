@@ -1,6 +1,4 @@
 {
-  "buildCommand": "cd coterate && npm install && npm run build",
   "outputDirectory": "coterate/build",
-  "installCommand": "echo Skipping root install",
   "framework": "create-react-app"
 } 
