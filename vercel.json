@@ -1,4 +1,5 @@
 {
+  "buildCommand": "./build.sh",
   "outputDirectory": "coterate/build",
-  "framework": "create-react-app"
+  "framework": null
 } 
