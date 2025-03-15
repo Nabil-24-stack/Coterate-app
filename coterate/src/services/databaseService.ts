@@ -1,5 +1,6 @@
 import { supabase } from './supabaseService';
 import { Page, DetectedComponent } from '../types';
+import axios from 'axios';
 
 // Helper function to convert snake_case to camelCase for database responses
 const snakeToCamel = (obj: any): any => {
@@ -31,44 +32,122 @@ const camelToSnake = (obj: any): any => {
   }, {} as any);
 };
 
+// Function to call our serverless API
+const callSupabaseApi = async (operation: string, table: string, data?: any, id?: string, userId?: string) => {
+  try {
+    // First try to use the serverless function
+    const response = await axios.post('/api/supabase', {
+      operation,
+      table,
+      data,
+      id,
+      userId
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error(`Error calling Supabase API (${operation}):`, error);
+    
+    // Fall back to direct Supabase calls if the serverless function fails
+    console.log('Falling back to direct Supabase call');
+    
+    switch (operation) {
+      case 'getItems':
+        let query = supabase.from(table).select('*');
+        
+        if (userId) {
+          query = query.eq('user_id', userId);
+        }
+        
+        const { data: items, error: itemsError } = await query;
+        
+        if (itemsError) {
+          throw itemsError;
+        }
+        
+        return { data: snakeToCamel(items) };
+        
+      case 'getItem':
+        const { data: item, error: itemError } = await supabase
+          .from(table)
+          .select('*')
+          .eq('id', id)
+          .single();
+        
+        if (itemError) {
+          throw itemError;
+        }
+        
+        return { data: snakeToCamel(item) };
+        
+      case 'createItem':
+        const snakeCaseData = camelToSnake(data);
+        
+        const { data: createdItem, error: createError } = await supabase
+          .from(table)
+          .insert(snakeCaseData)
+          .select();
+        
+        if (createError) {
+          throw createError;
+        }
+        
+        return { data: snakeToCamel(createdItem) };
+        
+      case 'updateItem':
+        const snakeCaseUpdates = camelToSnake(data);
+        
+        const { data: updatedItem, error: updateError } = await supabase
+          .from(table)
+          .update(snakeCaseUpdates)
+          .eq('id', id)
+          .select();
+        
+        if (updateError) {
+          throw updateError;
+        }
+        
+        return { data: snakeToCamel(updatedItem) };
+        
+      case 'deleteItem':
+        const { error: deleteError } = await supabase
+          .from(table)
+          .delete()
+          .eq('id', id);
+        
+        if (deleteError) {
+          throw deleteError;
+        }
+        
+        return { success: true };
+        
+      default:
+        throw new Error('Invalid operation');
+    }
+  }
+};
+
 // Pages
 export const getPages = async (userId: string) => {
   console.log('Getting pages for user:', userId);
   
   try {
-    const { data, error } = await supabase
-      .from('pages')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    
-    console.log('Supabase getPages response:', { data, error });
-    
-    // Convert snake_case to camelCase
-    const transformedData = data ? snakeToCamel(data) : null;
-    
-    return { data: transformedData, error };
-  } catch (err) {
-    console.error('Error in getPages Supabase call:', err);
-    return { data: null, error: err };
+    const result = await callSupabaseApi('getItems', 'pages', undefined, undefined, userId);
+    console.log('getPages response:', result);
+    return { data: result.data, error: null };
+  } catch (error) {
+    console.error('Error in getPages:', error);
+    return { data: null, error };
   }
 };
 
 export const getPage = async (id: string) => {
   try {
-    const { data, error } = await supabase
-      .from('pages')
-      .select('*')
-      .eq('id', id)
-      .single();
-    
-    // Convert snake_case to camelCase
-    const transformedData = data ? snakeToCamel(data) : null;
-    
-    return { data: transformedData, error };
-  } catch (err) {
-    console.error('Error in getPage Supabase call:', err);
-    return { data: null, error: err };
+    const result = await callSupabaseApi('getItem', 'pages', undefined, id);
+    return { data: result.data, error: null };
+  } catch (error) {
+    console.error('Error in getPage:', error);
+    return { data: null, error };
   }
 };
 
@@ -76,59 +155,32 @@ export const createPage = async (page: Omit<Page, 'id'>) => {
   console.log('createPage called with:', page);
   
   try {
-    // Convert camelCase to snake_case
-    const snakeCasePage = camelToSnake(page);
-    console.log('Converted to snake_case:', snakeCasePage);
-    
-    const { data, error } = await supabase
-      .from('pages')
-      .insert(snakeCasePage)
-      .select();
-    
-    console.log('Supabase createPage response:', { data, error });
-    
-    // Convert snake_case to camelCase
-    const transformedData = data ? snakeToCamel(data) : null;
-    
-    return { data: transformedData, error };
-  } catch (err) {
-    console.error('Error in createPage Supabase call:', err);
-    return { data: null, error: err };
+    const result = await callSupabaseApi('createItem', 'pages', page);
+    console.log('createPage response:', result);
+    return { data: result.data, error: null };
+  } catch (error) {
+    console.error('Error in createPage:', error);
+    return { data: null, error };
   }
 };
 
 export const updatePage = async (id: string, updates: Partial<Page>) => {
   try {
-    // Convert camelCase to snake_case
-    const snakeCaseUpdates = camelToSnake(updates);
-    
-    const { data, error } = await supabase
-      .from('pages')
-      .update(snakeCaseUpdates)
-      .eq('id', id)
-      .select();
-    
-    // Convert snake_case to camelCase
-    const transformedData = data ? snakeToCamel(data) : null;
-    
-    return { data: transformedData, error };
-  } catch (err) {
-    console.error('Error in updatePage Supabase call:', err);
-    return { data: null, error: err };
+    const result = await callSupabaseApi('updateItem', 'pages', updates, id);
+    return { data: result.data, error: null };
+  } catch (error) {
+    console.error('Error in updatePage:', error);
+    return { data: null, error };
   }
 };
 
 export const deletePage = async (id: string) => {
   try {
-    const { error } = await supabase
-      .from('pages')
-      .delete()
-      .eq('id', id);
-    
+    await callSupabaseApi('deleteItem', 'pages', undefined, id);
+    return { error: null };
+  } catch (error) {
+    console.error('Error in deletePage:', error);
     return { error };
-  } catch (err) {
-    console.error('Error in deletePage Supabase call:', err);
-    return { error: err };
   }
 };
 
