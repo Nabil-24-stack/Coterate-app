@@ -1,5 +1,12 @@
 // Shared types for the Coterate application
 
+// Interface for Figma data
+export interface FigmaData {
+  fileKey: string;
+  nodeId: string;
+  detailedComponents: any[];
+}
+
 // Interface for design iteration
 export interface DesignIteration {
   id: string;
@@ -10,6 +17,7 @@ export interface DesignIteration {
   analysis?: string;
   components?: DetectedComponent[];
   position?: { x: number, y: number }; // Position for dragging
+  figmaData?: FigmaData; // Figma-specific data
 }
 
 // Interface for AI service result

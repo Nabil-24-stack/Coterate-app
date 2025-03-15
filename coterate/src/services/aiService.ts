@@ -32,84 +32,88 @@ export const aiService = {
 /**
  * Generate an improved UI design using the whole-image approach
  * @param imageBase64 Base64 encoded image data
- * @param iterationPrompt Optional prompt to guide the AI in generating improvements
+ * @param customPrompt Optional custom prompt to guide the AI in generating improvements
  * @returns Object with improved image and analysis
  */
 export const generateImprovedUIDesign = async (
-  imageBase64: string, 
-  iterationPrompt?: string
+  imageBase64: string,
+  customPrompt?: string
 ): Promise<{ image: string; analysis: string }> => {
-  console.log('Starting whole-image UI improvement process...');
-  if (iterationPrompt) {
-    console.log('Using custom iteration prompt:', iterationPrompt);
-  }
-
-  // Validate API key - fail explicitly if not present
-  if (!OPENAI_API_KEY || !OPENAI_API_KEY.toString().startsWith('sk-')) {
-    throw new Error('OpenAI API key is missing or invalid. Please add a valid REACT_APP_OPENAI_API_KEY to your .env.local file.');
-  }
-  
-  // Validate Stability API key
-  if (!STABILITY_API_KEY || !STABILITY_API_KEY.toString().startsWith('sk-')) {
-    throw new Error('Stability API key is missing or invalid. Please add a valid REACT_APP_STABILITY_API_KEY to your .env.local file.');
-  }
-  
-  // Clean up the API key by removing any quotes, spaces, or line breaks
-  const cleanedApiKey = OPENAI_API_KEY.toString()
-    .replace(/["']/g, '') // Remove quotes
-    .replace(/\s+/g, '')  // Remove whitespace including line breaks
-    .trim();              // Trim any remaining whitespace
-  
-  if (cleanedApiKey === 'your-openai-api-key-here') {
-    throw new Error('Please replace the placeholder API key with your actual OpenAI API key in the .env.local file.');
-  }
+  console.log('🎨 Starting UI design improvement process...');
   
   try {
-    // First, analyze the UI design with OpenAI
-    console.log('🔍 Starting UI analysis with OpenAI...');
-    console.log('🌐 Using OpenAI API URL:', OPENAI_API_URL);
-    const analysis = await analyzeUIDesign(imageBase64, cleanedApiKey, iterationPrompt);
-    console.log('✅ UI analysis completed');
+    // Step 1: Analyze the image with GPT-4V
+    console.log('🔍 Analyzing current UI design...');
+    const analysis = await analyzeUIDesign(imageBase64, customPrompt);
+    console.log('✅ Analysis complete');
     
-    // Then, generate an improved UI design based on the analysis
+    // Step 2: Generate improved image with Stability AI
     console.log('🎨 Starting image generation with Stability AI...');
-    console.log('🌐 Using Stability API URL:', STABILITY_API_URL);
-    const improvedImage = await generateImprovedImage(imageBase64, analysis, STABILITY_API_KEY.toString(), iterationPrompt);
+    const improvedImage = await generateImprovedImage(imageBase64, analysis, customPrompt);
     console.log('✅ Improved UI generated');
     
     return {
       image: improvedImage,
-      analysis: analysis
+      analysis
     };
   } catch (error) {
-    console.error('Error in UI improvement process:', error);
-    // Re-throw the error instead of falling back to mock
-    throw error;
+    console.error('❌ Error in UI design improvement process:', error);
+    
+    // Provide more specific error messages based on the error type
+    if (error instanceof Error) {
+      if (error.message.includes('OpenAI API')) {
+        throw new Error(`OpenAI API error: ${error.message}. Please try again later.`);
+      } else if (error.message.includes('Stability API')) {
+        throw new Error(`Stability API error: ${error.message}. Please try again with a simpler prompt.`);
+      } else if (error.message.includes('rate limit')) {
+        throw new Error('API rate limit exceeded. Please try again in a few minutes.');
+      } else if (error.message.includes('character limit')) {
+        throw new Error('Prompt is too long. Please use a shorter custom prompt.');
+      }
+    }
+    
+    // Re-throw with a more user-friendly message if no specific case matched
+    throw new Error(`Failed to improve UI design: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 
 /**
- * Analyze a UI design using OpenAI's GPT-4 Vision
+ * Analyze a UI design using GPT-4o
  * @param imageBase64 Base64 encoded image data
- * @param apiKey Cleaned OpenAI API key
- * @param iterationPrompt Optional prompt to guide the analysis
+ * @param customPrompt Optional custom prompt to guide the analysis
  * @returns Analysis text
  */
-async function analyzeUIDesign(imageBase64: string, apiKey: string, iterationPrompt?: string): Promise<string> {
-  if (!apiKey) {
-    throw new Error('OpenAI API key is missing. Please check your .env file.');
-  }
+export const analyzeUIDesign = async (
+  imageBase64: string,
+  customPrompt?: string
+): Promise<string> => {
+  const apiKey = process.env.REACT_APP_OPENAI_API_KEY;
   
+  if (!apiKey) {
+    throw new Error('OpenAI API key is missing. Please check your environment variables.');
+  }
+
   try {
-    // Create the base prompt
-    let promptText = 'Analyze this UI design and suggest improvements for color scheme, typography, layout, spacing, and overall visual hierarchy. Be specific with your suggestions.';
+    console.log('🔍 Starting UI analysis with GPT-4o...');
     
-    // Add the user's custom prompt if provided
-    if (iterationPrompt && iterationPrompt.trim()) {
-      promptText = `${promptText}\n\nAdditional instructions: ${iterationPrompt}`;
+    // Prepare the base prompt for UI analysis
+    let prompt = `Analyze this UI design and provide specific, actionable improvements. 
+Focus on:
+1. Layout and spacing
+2. Color scheme and contrast
+3. Typography and readability
+4. Visual hierarchy
+5. Consistency
+6. Usability and accessibility
+
+Format your response as a structured analysis with clear sections.`;
+
+    // Add custom prompt if provided
+    if (customPrompt) {
+      prompt += `\n\nAdditional focus areas: ${customPrompt}`;
     }
     
-    const response = await fetch(OPENAI_API_URL, {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -121,14 +125,12 @@ async function analyzeUIDesign(imageBase64: string, apiKey: string, iterationPro
           {
             role: 'user',
             content: [
-              {
-                type: 'text',
-                text: promptText
-              },
+              { type: 'text', text: prompt },
               {
                 type: 'image_url',
                 image_url: {
-                  url: imageBase64
+                  url: imageBase64,
+                  detail: 'high'
                 }
               }
             ]
@@ -137,104 +139,176 @@ async function analyzeUIDesign(imageBase64: string, apiKey: string, iterationPro
         max_tokens: 1000
       })
     });
-    
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`OpenAI API error: ${response.status}`, errorText);
-      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+      const errorData = await response.text();
+      console.error(`OpenAI API error (${response.status}):`, errorData);
+      throw new Error(`OpenAI API error (${response.status}): ${errorData}`);
+    }
+
+    const data = await response.json();
+    
+    if (!data.choices || data.choices.length === 0) {
+      throw new Error('No analysis was generated by OpenAI');
     }
     
-    const data = await response.json();
     return data.choices[0].message.content;
   } catch (error) {
     console.error('Error analyzing UI design:', error);
+    
+    // Provide more specific error messages based on the error type
+    if (error instanceof Error) {
+      if (error.message.includes('429')) {
+        throw new Error('OpenAI API rate limit exceeded. Please try again later.');
+      } else if (error.message.includes('401') || error.message.includes('403')) {
+        throw new Error('Authentication error with OpenAI API. Please check your API key.');
+      } else if (error.message.includes('model_not_found')) {
+        throw new Error('The AI model is not available. Please check your OpenAI account or try again later.');
+      }
+    }
+    
+    // Re-throw the original error if it doesn't match any specific cases
     throw error;
   }
-}
+};
 
 /**
  * Generate an improved image based on analysis
  * @param originalImageBase64 Original image
  * @param analysisText Analysis text
- * @param apiKey Cleaned Stability API key
- * @param iterationPrompt Optional prompt to guide the image generation
+ * @param customPrompt Optional custom prompt to guide the image generation
  * @returns Improved image
  */
-async function generateImprovedImage(
-  originalImageBase64: string, 
-  analysisText: string, 
-  apiKey: string,
-  iterationPrompt?: string
-): Promise<string> {
+export const generateImprovedImage = async (
+  imageBase64: string,
+  analysisText: string,
+  customPrompt?: string
+): Promise<string> => {
+  const apiKey = process.env.REACT_APP_STABILITY_API_KEY;
+  
   if (!apiKey) {
-    throw new Error('Stability API key is missing. Please check your .env file.');
+    throw new Error('Stability API key is missing. Please check your environment variables.');
   }
-  
-  // Clean up the Stability API key
-  const cleanedStabilityKey = apiKey
-    .replace(/["']/g, '') // Remove quotes
-    .replace(/\s+/g, '')  // Remove whitespace including line breaks
-    .trim();              // Trim any remaining whitespace
-  
+
   try {
-    console.log('📝 Creating prompt for Stability AI based on analysis');
-    // Create a prompt based on the analysis
-    let prompt = `Create an improved version of this UI design with these changes:
-${analysisText.substring(0, 1000)}
+    // Extract the most important insights from the analysis text
+    // Limit to first 15 non-empty, non-header lines and cap at 500 chars
+    const analysisExcerpt = analysisText
+      .split('\n')
+      .filter(line => line.trim() && !line.startsWith('#'))
+      .slice(0, 15)
+      .join('\n')
+      .substring(0, 500);
+    
+    // Create a structured prompt that stays within character limits
+    let prompt = `
+Improve this UI design while maintaining the original layout and components.
 
-Make sure to maintain the same general layout and content, but improve the visual design.`;
+REQUIREMENTS:
+- Keep the same overall layout structure
+- Maintain all existing functionality
+- Preserve the same information hierarchy
 
-    // Add the user's custom prompt if provided
-    if (iterationPrompt && iterationPrompt.trim()) {
-      prompt += `\n\nAdditional instructions: ${iterationPrompt}`;
+IMPROVEMENTS:
+${analysisExcerpt}
+
+POLISH:
+- Use professional, modern UI design principles
+- Ensure visual hierarchy and balance
+- Apply consistent spacing and alignment
+- Enhance typography and color harmony
+`;
+
+    // Add custom prompt if provided (limited to 100 chars)
+    if (customPrompt) {
+      prompt += `\nCUSTOM: ${customPrompt.substring(0, 100)}`;
     }
+
+    // Final check to ensure we're within limits (with buffer)
+    if (prompt.length > 1900) {
+      prompt = prompt.substring(0, 1900);
+    }
+
+    console.log(`Prompt length: ${prompt.length} characters`);
     
-    console.log('🚀 Sending request to Stability AI API...');
-    // Call Stability AI API
-    const response = await fetch(STABILITY_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${cleanedStabilityKey}`,
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        text_prompts: [
-          {
-            text: prompt,
-            weight: 1
-          },
-          {
-            text: "blurry, distorted, low quality, pixelated, poor design, amateurish",
-            weight: -1
-          }
-        ],
-        cfg_scale: 7,
-        height: 1024,
-        width: 1024,
-        samples: 1,
-        steps: 40
-      })
-    });
+    // Prepare the request to Stability AI
+    const engine_id = "stable-diffusion-xl-1024-v1-0";
+    const apiHost = process.env.REACT_APP_API_HOST || 'https://api.stability.ai';
     
+    console.log(`Sending request to Stability AI (${engine_id})...`);
+    
+    // Ensure the image is properly formatted - remove data URL prefix if present
+    const cleanedImage = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '');
+    
+    // Try a different approach - using text-to-image endpoint instead of image-to-image
+    // This is a workaround for the image-to-image endpoint issues
+    const response = await fetch(
+      `${apiHost}/v1/generation/${engine_id}/text-to-image`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          text_prompts: [
+            {
+              text: prompt,
+              weight: 1.0,
+            },
+            {
+              text: "blurry, distorted, low quality, pixelated, poor design, amateurish, inconsistent layout",
+              weight: -1.0,
+            }
+          ],
+          cfg_scale: 7,
+          height: 1024,
+          width: 1024,
+          samples: 1,
+          steps: 30,
+          style_preset: "digital-art",
+        }),
+      }
+    );
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Stability API error: ${response.status}`, errorText);
-      throw new Error(`Stability API error: ${response.status} - ${errorText}`);
+      const errorData = await response.text();
+      console.error(`Stability API error (${response.status}):`, errorData);
+      throw new Error(`Stability API error (${response.status}): ${errorData}`);
+    }
+
+    const responseJSON = await response.json();
+    
+    if (!responseJSON.artifacts || responseJSON.artifacts.length === 0) {
+      throw new Error('No image was generated by Stability API');
     }
     
-    const data = await response.json();
-    
-    if (!data.artifacts || data.artifacts.length === 0) {
-      throw new Error('No image generated');
-    }
-    
-    return `data:image/png;base64,${data.artifacts[0].base64}`;
+    return `data:image/png;base64,${responseJSON.artifacts[0].base64}`;
   } catch (error) {
     console.error('Error generating improved image:', error);
+    
+    // Provide more specific error messages based on the error type
+    if (error instanceof Error) {
+      if (error.message.includes('429')) {
+        throw new Error('Stability API rate limit exceeded. Please try again later.');
+      } else if (error.message.includes('401') || error.message.includes('403')) {
+        throw new Error('Authentication error with Stability API. Please check your API key.');
+      } else if (error.message.includes('text_prompts')) {
+        throw new Error('Prompt exceeds character limit. Please use a shorter custom prompt.');
+      } else if (error.message.includes('init_image')) {
+        throw new Error('Invalid image format. Please use a valid PNG or JPEG image.');
+      } else if (error.message.includes('content-type')) {
+        throw new Error('Stability API requires multipart/form-data format. Using FormData to send the request.');
+      } else if (error.message.includes('bad_request')) {
+        throw new Error('Bad request to Stability API. Please check your image format and try again.');
+      }
+    }
+    
+    // Re-throw the original error if it doesn't match any specific cases
     throw error;
   }
-}
+};
 
 /**
  * Mock implementation for testing without API keys

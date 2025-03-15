@@ -7,6 +7,10 @@ import { usePageContext } from '../contexts/PageContext';
 import { generateImprovedUIDesign, aiService } from '../services/aiService';
 import { FigmaExport } from './FigmaExport';
 import { DesignIteration, DetectedComponent } from '../types';
+import figmaService from '../services/figmaService';
+import { DebugEnv } from './DebugEnv';
+import FigmaDebug from './FigmaDebug';
+import FigmaComponentsView from './FigmaComponentsView';
 
 // Global style to remove focus outlines and borders
 const GlobalStyle = createGlobalStyle`
@@ -414,7 +418,7 @@ const PasteOverlay = styled.div`
   border-radius: 12px;
   padding: 40px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  width: 500px;
+  width: 600px;
   max-width: 90%;
   
   h2 {
@@ -432,17 +436,6 @@ const PasteOverlay = styled.div`
     max-width: 400px;
     font-family: 'Plus Jakarta Sans', sans-serif;
   }
-`;
-
-// Error message
-const ErrorMessage = styled.div`
-  background-color: #ffebee;
-  color: #c62828;
-  padding: 12px 16px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  font-weight: 500;
 `;
 
 // Tooltip for selection hint
@@ -477,6 +470,132 @@ const HintIcon = styled.span`
   border-radius: 50%;
   background-color: rgba(255, 255, 255, 0.3);
   font-size: 14px;
+`;
+
+// Add this styled component for the improved design actions
+const ImprovedDesignActions = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+`;
+
+// Add this styled component for the custom prompt input
+const CustomPromptInput = styled.input`
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 300px;
+  padding: 10px;
+  border-radius: 20px;
+  border: 1px solid #ccc;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+`;
+
+// Add this styled component for the error overlay
+const ErrorOverlay = styled.div`
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 1000;
+`;
+
+// Add styled components for Figma URL input
+const FigmaUrlInputContainer = styled.div`
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  width: 100%;
+`;
+
+const FigmaUrlField = styled.input`
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #E3E6EA;
+  border-radius: 6px 0 0 6px;
+  font-size: 14px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  
+  &:focus {
+    outline: none;
+    border-color: #4A90E2;
+  }
+`;
+
+const FigmaUrlButton = styled.button`
+  padding: 10px 15px;
+  background-color: #0066ff;
+  color: white;
+  border: none;
+  border-radius: 0 6px 6px 0;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  
+  &:hover {
+    background-color: #0052cc;
+  }
+  
+  &:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+  }
+`;
+
+// Add error message component
+const ErrorMessage = styled.div`
+  color: #e53935;
+  font-size: 14px;
+  margin-top: 10px;
+  text-align: center;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+`;
+
+// Add this styled component for design actions
+const DesignActions = styled.div`
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+`;
+
+// Add this styled component near the other styled components
+const ComponentActions = styled.div`
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+  font-size: 12px;
+`;
+
+const ComponentCount = styled.div`
+  background-color: #e3f2fd;
+  color: #1976d2;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+`;
+
+// Add this styled component near the other styled components
+const FigmaIndicator = styled.div`
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: #1e88e5;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 5;
 `;
 
 // Canvas component
@@ -525,6 +644,16 @@ export const Canvas = () => {
   // Get the iterations for the current page
   const iterations = currentPage ? (iterationsMap[currentPage.id] || []) : [];
   
+  // State for component analysis results
+  const [componentResult, setComponentResult] = useState<any>(null);
+  const [improvedImage, setImprovedImage] = useState<string | null>(null);
+  const [customPrompt, setCustomPrompt] = useState<string>('');
+
+  // Add state for Figma data
+  const [figmaData, setFigmaData] = useState<any>(null);
+  const [isLoadingFigma, setIsLoadingFigma] = useState<boolean>(false);
+  const [figmaError, setFigmaError] = useState<string | null>(null);
+
   // Reset canvas position and scale
   const resetCanvas = () => {
     // If we don't have a current page, do nothing
@@ -722,8 +851,23 @@ export const Canvas = () => {
   const handleCanvasWheel = (e: React.WheelEvent) => {
     if (!currentPage) return;
     e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    
+    // Reduce the zoom sensitivity and add a time-based throttle
+    const now = Date.now();
+    if (handleCanvasWheel.lastZoomTime && now - handleCanvasWheel.lastZoomTime < 50) {
+      return; // Throttle zoom events to max 20 per second
+    }
+    handleCanvasWheel.lastZoomTime = now;
+    
+    // Reduce zoom speed and make it more consistent across devices
+    const zoomFactor = 0.05; // Smaller value for more gradual zoom
+    const delta = e.deltaY > 0 ? -zoomFactor : zoomFactor;
+    
+    // Limit the scale change per event
     const newScale = Math.max(0.5, Math.min(2, canvasScale + delta));
+    
+    // Only proceed if the scale actually changed
+    if (newScale === canvasScale) return;
     
     // Calculate cursor position relative to canvas
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -732,10 +876,16 @@ export const Canvas = () => {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
-    // Calculate new position to zoom towards cursor
-    const newX = canvasPosition.x - ((mouseX - canvasPosition.x) * (delta / canvasScale));
-    const newY = canvasPosition.y - ((mouseY - canvasPosition.y) * (delta / canvasScale));
+    // Calculate new position to zoom towards cursor with improved formula
+    const zoomPoint = {
+      x: (mouseX - canvasPosition.x) / canvasScale,
+      y: (mouseY - canvasPosition.y) / canvasScale
+    };
     
+    const newX = mouseX - zoomPoint.x * newScale;
+    const newY = mouseY - zoomPoint.y * newScale;
+    
+    // Update state
     setCanvasScale(newScale);
     setCanvasPosition({ x: newX, y: newY });
     
@@ -750,6 +900,9 @@ export const Canvas = () => {
       centeringRef.current.hasCentered = true;
     }
   };
+  
+  // Add static property for throttling
+  handleCanvasWheel.lastZoomTime = 0 as number;
 
   // Toggle analysis panel
   const toggleAnalysis = () => {
@@ -763,10 +916,11 @@ export const Canvas = () => {
 
   // Open iteration dialog
   const openIterationDialog = () => {
-    setShowIterationDialog(true);
+    // Instead of showing the dialog, directly start the iteration process
+    handleIterate();
   };
 
-  // Close iteration dialog
+  // Close iteration dialog - keeping this for compatibility
   const closeIterationDialog = () => {
     setShowIterationDialog(false);
     setIterationPrompt('');
@@ -774,200 +928,61 @@ export const Canvas = () => {
 
   // Handle iteration
   const handleIterate = async () => {
-    if (!currentPage) return;
-    
-    // Get the base iteration to improve
-    const baseIteration = iterations.find(i => i.iterationType === 'base');
-    
-    if (!baseIteration) {
-      console.error('No base iteration found for improvement');
-      setError('No base design found to improve');
-            return;
-    }
-    
-    setIsLoading(true);
-    setError(null);
-    setShowIterationDialog(false);
+    if (!canvasRef.current) return;
     
     try {
-      console.log('🔄 Starting design iteration...');
+      setIsLoading(true);
+      setError(null);
       
-      // Get the image to improve
-      const imageToImprove = baseIteration.image;
+      // Get the current canvas as a base64 image
+      const imageBase64 = await htmlToImageService.convertHtmlToImage(canvasRef.current.outerHTML);
       
-      // Process the image
-      console.log('🖼️ Processing image for AI improvement...');
-      
-      // Call the AI service to generate an improved design
-      const result = await generateImprovedUIDesign(imageToImprove, iterationPrompt || undefined);
-      
-      if (!result || !result.image) {
-        throw new Error('Failed to generate improved design');
+      // First, analyze the components if not already done
+      if (!componentResult) {
+        try {
+          const result = await aiComponentService.improveUIWithComponents(imageBase64);
+          setComponentResult(result);
+          console.log(`Successfully analyzed components:`, result);
+        } catch (componentError) {
+          console.warn('Component analysis failed:', componentError);
+          // Continue with basic image generation even if component analysis fails
+        }
       }
       
-      console.log('✅ Successfully generated improved design');
+      // Prepare limited improvements if we have component results
+      let analysisText = '';
+      if (componentResult && componentResult.analysis && componentResult.analysis.improvements) {
+        // Take only the first 3 improvements
+        const limitedImprovements = componentResult.analysis.improvements
+          .slice(0, 3)
+          .map((imp: any) => {
+            // For each improvement, include only the most important properties
+            return {
+              component: imp.component,
+              suggestion: imp.suggestion?.substring(0, 100) || '',
+              reasoning: imp.reasoning ? imp.reasoning.substring(0, 100) : ''
+            };
+          });
+        
+        analysisText = JSON.stringify(limitedImprovements, null, 2);
+      }
       
-      // Create a new iteration
-      const newIteration: DesignIteration = {
-        id: `iteration-${Date.now()}`,
-        image: result.image,
-        label: `Iteration ${iterations.filter(i => i.iterationType === 'improved').length + 1}`,
-        iterationType: 'improved',
-        iterationNumber: iterations.filter(i => i.iterationType === 'improved').length + 1,
-        analysis: result.analysis,
-        // Position the iterated design with an offset from the base design
-        position: {
-          x: (baseIteration.position?.x || 0) + 100,
-          y: (baseIteration.position?.y || 0) + 50
-        }
-      };
+      // Generate improved UI design using the Stability API
+      const result = await generateImprovedUIDesign(imageBase64, analysisText);
       
-      // Add the new iteration to the map for the current page
-      const updatedPageIterations = [...iterations, newIteration];
-      setIterationsMap(prev => ({
-        ...prev,
-        [currentPage.id]: updatedPageIterations
-      }));
+      // Set the improved image
+      setImprovedImage(result.image);
       
-      // Set the new iteration as selected
-      setSelectedIteration(newIteration);
+      // Log success
+      console.log('Successfully generated improved UI design');
       
-      // Update the page with the iterated image
-      updatePage(currentPage.id, {
-        ...currentPage,
-        iteratedImage: result.image
-      });
-      
-      console.log('✅ Iteration completed successfully');
-      setIterationPrompt('');
     } catch (error) {
-      console.error('❌ Error during iteration:', error);
-      setError(`Failed to generate improved design: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('Error during iteration:', error);
+      setError(error instanceof Error ? error.message : 'An unknown error occurred');
     } finally {
       setIsLoading(false);
     }
   };
-
-  // Handle paste event
-  useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
-      if (!currentPage) return;
-      
-      // Prevent default paste behavior which might cause focus issues
-      e.preventDefault();
-      e.stopPropagation();
-      
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-          const blob = items[i].getAsFile();
-          
-          if (blob) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              const imageDataUrl = e.target?.result as string;
-              if (imageDataUrl) {
-                // Get current iterations for this page
-                const currentIterations = iterationsMap[currentPage.id] || [];
-                
-                // If this is the first design being pasted (empty canvas)
-                if (currentIterations.length === 0 || 
-                    (currentPage?.baseImage === 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design')) {
-                  // Update the page's base image
-                  updatePage(currentPage.id, { baseImage: imageDataUrl });
-                  
-                  // Create base iteration
-                  const baseIteration: DesignIteration = {
-                    id: `base-${currentPage.id}-${Date.now()}`,
-                    image: imageDataUrl,
-                    label: 'Base Design',
-                    iterationType: 'base',
-                    iterationNumber: 0,
-                    position: { x: 0, y: 0 } // Initialize position
-                  };
-                  
-                  // Set iterations for this page to just the base iteration
-                  setIterationsMap(prev => ({
-                    ...prev,
-                    [currentPage.id]: [baseIteration]
-                  }));
-                  
-                  setSelectedIteration(baseIteration);
-                } else {
-                  // Calculate a position offset for the new design
-                  // This will place new designs in a cascading pattern
-                  const offsetX = (currentIterations.length % 3) * 50;
-                  const offsetY = (currentIterations.length % 3) * 50;
-                  
-                  // Create a new design iteration
-                  const newIteration: DesignIteration = {
-                    id: `design-${currentPage.id}-${Date.now()}`,
-                    image: imageDataUrl,
-                    label: `Design ${currentIterations.length + 1}`,
-                    iterationType: 'base',
-                    iterationNumber: currentIterations.length,
-                    position: { x: offsetX, y: offsetY } // Initialize with offset
-                  };
-                  
-                  // Add the new iteration to the existing ones
-                  setIterationsMap(prev => ({
-                    ...prev,
-                    [currentPage.id]: [...(prev[currentPage.id] || []), newIteration]
-                  }));
-                  
-                  // Select the newly added iteration
-                  setSelectedIteration(newIteration);
-                }
-                
-                // Reset canvas position and scale
-                // Use requestAnimationFrame to ensure the DOM has updated
-                requestAnimationFrame(() => {
-                  // Reset the centering state for the current page
-                  if (currentPage) {
-                    centeringRef.current = {
-                      pageId: currentPage.id,
-                      hasCentered: false,
-                      animationFrameId: null
-                    };
-                  }
-                  
-                  // Reset the canvas to center the design
-                  resetCanvas();
-                });
-                
-                // Remove focus from any elements
-                if (document.activeElement instanceof HTMLElement) {
-                  document.activeElement.blur();
-                }
-                
-                // Add a small delay and then apply a CSS fix to remove any borders
-                setTimeout(() => {
-                  const images = document.querySelectorAll('img');
-                  images.forEach(img => {
-                    img.style.border = 'none';
-                    img.style.outline = 'none';
-                    img.style.boxShadow = 'none';
-                  });
-                }, 100);
-              }
-            };
-            reader.readAsDataURL(blob);
-          }
-        }
-      }
-    };
-    
-    document.addEventListener('paste', handlePaste);
-    return () => {
-      document.removeEventListener('paste', handlePaste);
-    };
-  }, [currentPage, updatePage, iterationsMap]);
-
-  // Check if we need to show the paste overlay
-  const showPasteOverlay = (iterations.length === 0 || 
-    (currentPage?.baseImage === 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design'));
 
   // Handle design mouse down for dragging
   const handleDesignMouseDown = (e: React.MouseEvent, iterationId: string) => {
@@ -987,13 +1002,18 @@ export const Canvas = () => {
     // Only allow dragging if the design is already selected
     setDraggingDesign(iterationId);
     
+    // Get the element's bounding rectangle
+    const rect = e.currentTarget.getBoundingClientRect();
+    
     // Calculate the offset between the mouse position and the design's top-left corner
     // This ensures the design doesn't jump to have its top-left corner at the mouse position
-    const rect = e.currentTarget.getBoundingClientRect();
     setDesignDragStart({
       x: e.clientX - (iteration.position?.x || 0),
       y: e.clientY - (iteration.position?.y || 0)
     });
+    
+    // Immediately apply a grabbing cursor to the document for better UX
+    document.body.style.cursor = 'grabbing';
   };
   
   // Handle design mouse move for dragging
@@ -1010,32 +1030,481 @@ export const Canvas = () => {
       y: e.clientY - designDragStart.y
     };
     
-    // Use requestAnimationFrame for smoother updates
-    requestAnimationFrame(() => {
-      // Update the iteration's position
-      setIterationsMap(prev => {
-        const updatedIterations = prev[currentPage.id].map(it => {
-          if (it.id === draggingDesign) {
-            return {
-              ...it,
-              position: newPosition
-            };
-          }
-          return it;
+    // Apply the position directly to the DOM element for immediate visual feedback
+    const designElement = document.querySelector(`[data-iteration-id="${draggingDesign}"]`);
+    if (designElement) {
+      designElement.setAttribute('style', 
+        `transform: translate(${newPosition.x}px, ${newPosition.y}px); 
+         z-index: 30; 
+         background-color: ${selectedIteration?.id === draggingDesign ? '#f8f9ff' : 'white'};
+         ${draggingDesign === iteration.id ? 'opacity: 0.9;' : ''}`
+      );
+    }
+    
+    // Debounce the state update to reduce React re-renders
+    if (!handleDesignMouseMove.debounceTimer) {
+      handleDesignMouseMove.debounceTimer = setTimeout(() => {
+        // Update the iteration's position in state
+        setIterationsMap(prev => {
+          const updatedIterations = prev[currentPage.id].map(it => {
+            if (it.id === draggingDesign) {
+              return {
+                ...it,
+                position: newPosition
+              };
+            }
+            return it;
+          });
+          
+          return {
+            ...prev,
+            [currentPage.id]: updatedIterations
+          };
         });
-        
-        return {
-          ...prev,
-          [currentPage.id]: updatedIterations
-        };
-      });
-    });
+        handleDesignMouseMove.debounceTimer = null;
+      }, 16); // ~60fps
+    }
   };
+  
+  // Add the debounce timer property to the function
+  handleDesignMouseMove.debounceTimer = null as any;
   
   // Handle design mouse up to stop dragging
   const handleDesignMouseUp = () => {
     setDraggingDesign(null);
+    // Reset cursor style
+    document.body.style.cursor = '';
   };
+
+  // Updated paste handler to handle both images and Figma URLs
+  const handlePaste = React.useCallback(async (e: ClipboardEvent) => {
+    // Check if the paste target is an input field
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      // Allow default paste behavior for input fields
+      console.log('Paste target is an input field, allowing default behavior');
+      return;
+    }
+    
+    // For all other paste events, prevent default and handle manually
+    e.preventDefault();
+    console.log('Paste event detected, prevented default behavior');
+    
+    // Check if the pasted content is text (potentially a Figma URL)
+    const clipboardText = e.clipboardData?.getData('text');
+    console.log('Clipboard text:', clipboardText);
+    
+    if (clipboardText && (clipboardText.includes('figma.com/file/') || clipboardText.includes('figma.com/design/'))) {
+      console.log('Figma URL detected:', clipboardText);
+      try {
+        setIsLoadingFigma(true);
+        setFigmaError(null);
+        
+        // Validate the Figma URL
+        console.log('Validating Figma URL...');
+        const validation = figmaService.validateFigmaUrl(clipboardText);
+        console.log('Validation result:', validation);
+        
+        if (!validation.isValid) {
+          console.error('Figma URL validation failed:', validation.message);
+          throw new Error(validation.message || 'Invalid Figma URL');
+        }
+        
+        // Extract file key and node ID from the Figma URL
+        const { fileKey } = figmaService.extractFigmaInfo(clipboardText);
+        let { nodeId } = figmaService.extractFigmaInfo(clipboardText);
+        console.log('Extracted file key:', fileKey, 'node ID:', nodeId);
+        
+        if (!fileKey) {
+          console.error('Could not extract file key from Figma URL');
+          throw new Error('Invalid Figma URL. Could not extract file key.');
+        }
+        
+        if (!nodeId) {
+          console.warn('No node ID found in the Figma URL. Will try to fetch the default frame.');
+          // We'll continue without a node ID, but show a warning to the user
+          setFigmaError('Warning: No specific frame (node ID) found in the URL. Attempting to fetch the default frame.');
+        }
+        
+        console.log('Processing Figma URL:', clipboardText);
+        console.log('Extracted file key:', fileKey, 'node ID:', nodeId || 'none (using default)');
+        
+        // Fetch file data from Figma API
+        console.log('Fetching Figma file data...');
+        const fileData = await figmaService.getFigmaFileData(fileKey, nodeId || null);
+        
+        // Process the Figma data
+        console.log('Processing Figma data...');
+        const processedData = figmaService.processFigmaData(fileData);
+        
+        // Store the processed Figma data for later use
+        setFigmaData(processedData);
+        
+        // Extract detailed components from the Figma data
+        console.log('Extracting detailed components...');
+        const detailedComponents = processedData.detailedComponents;
+        
+        // Convert Figma components to Coterate DetectedComponent format
+        console.log('Converting to DetectedComponent format...');
+        const detectedComponents = figmaService.convertToDetectedComponents(detailedComponents);
+        
+        console.log(`Extracted ${detectedComponents.length} components from Figma design`);
+        
+        // If we don't have a node ID, try to get the first node from the file data
+        if (!nodeId && fileData && fileData.document) {
+          console.log('No node ID provided, attempting to use the first node from the file data');
+          
+          // Try to find the first frame or component in the document
+          const findFirstNode = (node: any): string | null => {
+            // Skip if node is null or undefined
+            if (!node) {
+              console.log('Node is null or undefined in findFirstNode');
+              return null;
+            }
+            
+            console.log('Checking node:', node.id, 'type:', node.type);
+            
+            // Check for visible content
+            const isVisible = node.visible !== false; // Default to true if not specified
+            
+            // First, check if this is a valid node type that can be rendered
+            if (isVisible && (
+              node.type === 'FRAME' || 
+              node.type === 'COMPONENT' || 
+              node.type === 'INSTANCE' || 
+              node.type === 'GROUP' || 
+              node.type === 'CANVAS' || 
+              node.type === 'PAGE'
+            )) {
+              // Check if the node has a non-zero size (if it has a bounding box)
+              if (node.absoluteBoundingBox && 
+                  node.absoluteBoundingBox.width > 0 && 
+                  node.absoluteBoundingBox.height > 0) {
+                console.log('Found valid node:', node.id, 'type:', node.type);
+                return node.id;
+              } else {
+                console.log('Node has zero size or no bounding box:', node.id);
+              }
+            }
+            
+            // If this node isn't suitable, check its children
+            if (node.children) {
+              console.log('Node has children, count:', Array.isArray(node.children) ? node.children.length : 'not an array');
+              
+              // Check if children is an array
+              if (Array.isArray(node.children)) {
+                // First try to find FRAME or COMPONENT types (preferred)
+                for (const child of node.children) {
+                  if (child.type === 'FRAME' || child.type === 'COMPONENT') {
+                    const foundId = findFirstNode(child);
+                    if (foundId) return foundId;
+                  }
+                }
+                
+                // If no FRAME or COMPONENT found, try any other valid node type
+                for (const child of node.children) {
+                  const foundId = findFirstNode(child);
+                  if (foundId) return foundId;
+                }
+              } else {
+                console.warn('node.children is not an array in findFirstNode for node:', node.id || 'unknown');
+                
+                // Try to handle the case where children might be an object with numeric keys
+                if (typeof node.children === 'object') {
+                  try {
+                    const childValues = Object.values(node.children);
+                    
+                    // First try to find FRAME or COMPONENT types (preferred)
+                    for (const child of childValues) {
+                      if ((child as any).type === 'FRAME' || (child as any).type === 'COMPONENT') {
+                        const foundId = findFirstNode(child as any);
+                        if (foundId) return foundId;
+                      }
+                    }
+                    
+                    // If no FRAME or COMPONENT found, try any other valid node type
+                    for (const child of childValues) {
+                      const foundId = findFirstNode(child as any);
+                      if (foundId) return foundId;
+                    }
+                  } catch (error) {
+                    console.error('Failed to process node.children as object:', error);
+                  }
+                }
+              }
+            }
+            
+            return null;
+          };
+          
+          const firstNodeId = findFirstNode(fileData.document);
+          
+          if (firstNodeId) {
+            console.log('Found first node ID:', firstNodeId);
+            nodeId = firstNodeId;
+          } else {
+            console.error('Could not find any frames or components in the document');
+            throw new Error('Could not find any frames or components in the document. Please try a different Figma file or specify a node ID.');
+          }
+        }
+        
+        if (!nodeId) {
+          throw new Error('No node ID found and could not determine a default node. Please use a Figma URL with a specific frame.');
+        }
+        
+        // Fetch the image for the node
+        console.log('Fetching Figma image...');
+        let imagesResponse;
+        let imageUrl;
+        let fetchSuccess = false;
+
+        // Try different combinations of formats and scales if the first attempt fails
+        const formats = ['png', 'svg', 'jpg'] as const;
+        const scales = [2, 1, 3] as const;
+
+        for (const format of formats) {
+          if (fetchSuccess) break;
+          
+          for (const scale of scales) {
+            try {
+              console.log(`Attempting to fetch image with format: ${format}, scale: ${scale}`);
+              imagesResponse = await figmaService.getFigmaImages(fileKey, [nodeId], format, scale);
+              
+              if (imagesResponse.images && imagesResponse.images[nodeId]) {
+                imageUrl = imagesResponse.images[nodeId];
+                console.log('Image URL received:', imageUrl.substring(0, 50) + '...');
+                fetchSuccess = true;
+                break;
+              }
+            } catch (fetchError) {
+              console.warn(`Failed to fetch image with format: ${format}, scale: ${scale}`, fetchError);
+              // Continue to the next combination
+            }
+          }
+        }
+
+        if (!fetchSuccess) {
+          console.error('All attempts to fetch Figma image failed');
+          throw new Error('Could not retrieve image from Figma API. The frame might not contain any visible content or you might not have access to this file.');
+        }
+
+        // Create an image element to load the image
+        console.log('Loading image...');
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = imageUrl;
+        
+        // Wait for the image to load
+        await new Promise((resolve, reject) => {
+          img.onload = () => {
+            console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
+            resolve(null);
+          };
+          img.onerror = (err) => {
+            console.error('Error loading image:', err);
+            reject(new Error('Failed to load the Figma image. The image might be too large or unavailable.'));
+          };
+          
+          // Add a timeout to prevent hanging if the image doesn't load
+          setTimeout(() => {
+            reject(new Error('Timed out while loading the Figma image. Please try again or use a different frame.'));
+          }, 30000); // 30 second timeout
+        });
+        
+        // Create a canvas to convert the image to base64
+        console.log('Converting image to base64...');
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+          throw new Error('Could not create canvas context for image processing.');
+        }
+        
+        ctx.drawImage(img, 0, 0);
+        
+        // Get base64 data URL
+        const base64Image = canvas.toDataURL('image/png');
+        console.log('Image converted to base64, length:', base64Image.length);
+        
+        // Update the page with the Figma design
+        if (!currentPage) {
+          throw new Error('No page is currently selected. Please create or select a page first.');
+        }
+        
+        console.log('Updating page with Figma design...');
+        // Update the page's base image
+        updatePage(currentPage.id, { baseImage: base64Image });
+        
+        // Get current iterations for this page
+        const currentIterations = iterationsMap[currentPage.id] || [];
+        
+        // Create a base iteration for this design
+        const baseIteration: DesignIteration = {
+          id: `figma-${currentPage.id}-${Date.now()}`,
+          image: base64Image,
+          label: 'Figma Design',
+          iterationType: 'base',
+          iterationNumber: currentIterations.length,
+          position: { x: 0, y: 0 }, // Initialize position
+          components: detectedComponents, // Store the detected components
+          figmaData: {
+            fileKey,
+            nodeId,
+            detailedComponents
+          } // Store Figma-specific data
+        };
+        
+        // If this is the first design being pasted (empty canvas)
+        if (currentIterations.length === 0) {
+          // Set iterations for this page to just the base iteration
+          setIterationsMap(prev => ({
+            ...prev,
+            [currentPage.id]: [baseIteration]
+          }));
+        } else {
+          // Calculate a position offset for the new design
+          const offsetX = (currentIterations.length % 3) * 50;
+          const offsetY = (currentIterations.length % 3) * 50;
+          
+          // Update position with offset
+          baseIteration.position = { x: offsetX, y: offsetY };
+          
+          // Add the new iteration to the existing ones
+          setIterationsMap(prev => ({
+            ...prev,
+            [currentPage.id]: [...(prev[currentPage.id] || []), baseIteration]
+          }));
+        }
+        
+        // Set the detected components for the current page
+        setDetectedComponents(detectedComponents);
+        
+        // Select the new iteration
+        setSelectedIteration(baseIteration);
+        
+        // Reset canvas position and scale to center the new design
+        setTimeout(() => {
+          resetCanvas();
+          console.log('Canvas reset to center the new design');
+        }, 100);
+        
+        console.log('Figma design loaded successfully!');
+        setIsLoadingFigma(false);
+      } catch (error) {
+        console.error('Error processing Figma URL:', error);
+        // Log the full error object for debugging
+        console.error('Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace available');
+        
+        // Set the error message to be displayed to the user
+        let errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        
+        // Add helpful suggestions based on the error message
+        if (errorMessage.includes('Could not retrieve image from Figma API')) {
+          errorMessage += '\n\nPossible solutions:\n' +
+            '1. Make sure the Figma frame contains visible content\n' +
+            '2. Try copying a link to a specific frame by right-clicking on it in Figma and selecting "Copy Link"\n' +
+            '3. Check that your Figma access token has permission to access this file\n' +
+            '4. Ensure the file is published and accessible';
+        } else if (errorMessage.includes('file not found') || errorMessage.includes('Access denied')) {
+          errorMessage += '\n\nPossible solutions:\n' +
+            '1. Check that your Figma access token is valid and has permission to access this file\n' +
+            '2. Make sure the file is published and accessible\n' +
+            '3. Try copying the link again from Figma';
+        }
+        
+        setFigmaError(errorMessage);
+        console.log('Set figmaError to:', errorMessage);
+        
+        // Check if the error is being displayed
+        console.log('Current figmaError state:', figmaError);
+        
+        setIsLoadingFigma(false);
+      }
+    } else {
+      console.log('Not a Figma URL, checking for image paste');
+      // Handle image paste
+      const items = e.clipboardData?.items;
+      console.log('Clipboard items:', items ? items.length : 'none');
+      
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          console.log(`Item ${i} type:`, items[i].type);
+          if (items[i].type.indexOf('image') !== -1) {
+            console.log('Image detected in clipboard');
+            const blob = items[i].getAsFile();
+            if (blob) {
+              console.log('Got file blob, reading as data URL');
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                const base64data = event.target?.result as string;
+                console.log('Image loaded as base64, length:', base64data ? base64data.length : 0);
+                if (currentPage) {
+                  // Update the page's base image
+                  updatePage(currentPage.id, { baseImage: base64data });
+                  
+                  // Get current iterations for this page
+                  const currentIterations = iterationsMap[currentPage.id] || [];
+                  
+                  // If this is the first design being pasted (empty canvas)
+                  if (currentIterations.length === 0) {
+                    // Create base iteration
+                    const baseIteration: DesignIteration = {
+                      id: `base-${currentPage.id}-${Date.now()}`,
+                      image: base64data,
+                      label: 'Base Design',
+                      iterationType: 'base',
+                      iterationNumber: 0,
+                      position: { x: 0, y: 0 } // Initialize position
+                    };
+                    
+                    // Set iterations for this page to just the base iteration
+                    setIterationsMap(prev => ({
+                      ...prev,
+                      [currentPage.id]: [baseIteration]
+                    }));
+                    
+                    setSelectedIteration(baseIteration);
+                  } else {
+                    // Calculate a position offset for the new design
+                    // This will place new designs in a cascading pattern
+                    const offsetX = (currentIterations.length % 3) * 50;
+                    const offsetY = (currentIterations.length % 3) * 50;
+                    
+                    // Create a new design iteration
+                    const newIteration: DesignIteration = {
+                      id: `design-${currentPage.id}-${Date.now()}`,
+                      image: base64data,
+                      label: `Design ${currentIterations.length + 1}`,
+                      iterationType: 'base',
+                      iterationNumber: currentIterations.length,
+                      position: { x: offsetX, y: offsetY } // Initialize with offset
+                    };
+                    
+                    // Add the new iteration to the existing ones
+                    setIterationsMap(prev => ({
+                      ...prev,
+                      [currentPage.id]: [...(prev[currentPage.id] || []), newIteration]
+                    }));
+                    
+                    // Select the newly added iteration
+                    setSelectedIteration(newIteration);
+                  }
+                  
+                  // Reset canvas position and scale
+                  setTimeout(() => {
+                    resetCanvas();
+                  }, 100);
+                }
+              };
+              reader.readAsDataURL(blob);
+            }
+          }
+        }
+      }
+    }
+  }, [currentPage, updatePage, iterationsMap, resetCanvas]);
 
   // Add event listeners for mouse move and mouse up on the document
   useEffect(() => {
@@ -1064,8 +1533,25 @@ export const Canvas = () => {
     return () => {
       document.removeEventListener('mousemove', handleDocumentMouseMove);
       document.removeEventListener('mouseup', handleDocumentMouseUp);
+      
+      // Clear any pending timers
+      if (handleDesignMouseMove.debounceTimer) {
+        clearTimeout(handleDesignMouseMove.debounceTimer);
+        handleDesignMouseMove.debounceTimer = null;
+      }
+      
+      // Reset cursor if needed
+      document.body.style.cursor = '';
     };
   }, [draggingDesign, isDragging, handleDesignMouseMove, handleCanvasMouseMove, handleDesignMouseUp, handleCanvasMouseUp]);
+
+  // Add paste event listener
+  useEffect(() => {
+    document.addEventListener('paste', handlePaste);
+    return () => {
+      document.removeEventListener('paste', handlePaste);
+    };
+  }, [currentPage, updatePage, iterationsMap, resetCanvas, handlePaste]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -1185,14 +1671,9 @@ export const Canvas = () => {
           scale={canvasScale}
           tabIndex={-1}
         >
-          {showPasteOverlay ? (
-            <PasteOverlay>
-              <h2>Paste Your UI Design</h2>
-              <p>Copy a UI design image and press Ctrl+V / Cmd+V to paste it here</p>
-            </PasteOverlay>
-          ) : (
-            <DesignContainer>
-              {iterations.map((iteration) => (
+          <DesignContainer>
+            {iterations.length > 0 ? (
+              iterations.map((iteration) => (
                 <DesignCard 
                   key={iteration.id} 
                   onClick={(e) => {
@@ -1201,6 +1682,7 @@ export const Canvas = () => {
                   }}
                   onMouseDown={(e) => handleDesignMouseDown(e, iteration.id)}
                   tabIndex={-1}
+                  data-iteration-id={iteration.id}
                   className={`
                     ${selectedIteration?.id === iteration.id ? 'selected' : ''}
                     ${draggingDesign === iteration.id ? 'dragging' : ''}
@@ -1212,38 +1694,121 @@ export const Canvas = () => {
                   }}
                 >
                   <DesignLabel>{iteration.label}</DesignLabel>
-                  <div style={{ position: 'relative' }}>
-                    <DesignImage 
-                      src={iteration.image} 
-                      alt={iteration.label}
-                      tabIndex={-1}
-                    />
-                    
-                    {iteration.iterationType === 'base' && iterations.filter(i => i.iterationType === 'improved').length < maxIterations && (
-                      <FloatingActionButton 
+                  
+                  {/* Add Figma indicator for designs with Figma data */}
+                  {iteration.figmaData && (
+                    <FigmaIndicator>
+                      <span role="img" aria-label="Figma">🖼️</span>
+                      Figma
+                    </FigmaIndicator>
+                  )}
+                  
+                  <DesignImage src={iteration.image} alt={iteration.label} />
+                  
+                  {/* Add component actions if this is a Figma design with components */}
+                  {iteration.figmaData && iteration.components && iteration.components.length > 0 && (
+                    <ComponentActions>
+                      <ComponentCount>
+                        {iteration.components.length} components detected
+                      </ComponentCount>
+                    </ComponentActions>
+                  )}
+                  
+                  {selectedIteration?.id === iteration.id && (
+                    <DesignActions>
+                      <ActionButton 
                         onClick={(e) => {
                           e.stopPropagation();
-                          openIterationDialog();
-                        }}
-                        disabled={isLoading}
-                        style={{
-                          position: 'absolute',
-                          right: '-24px', 
-                          top: '50%',
-                          transform: 'translateY(-50%)'
+                          toggleAnalysis();
                         }}
                       >
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M12 4V20" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M4 12H20" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </FloatingActionButton>
-                    )}
-                  </div>
+                        <span role="img" aria-label="Analyze">🔍</span> Analyze
+                      </ActionButton>
+                      
+                      <ActionButton 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFigmaExport();
+                        }}
+                      >
+                        <span role="img" aria-label="Export">📤</span> Export
+                      </ActionButton>
+                    </DesignActions>
+                  )}
                 </DesignCard>
-              ))}
-            </DesignContainer>
-          )}
+              ))
+            ) : (
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                textAlign: 'center',
+                color: '#666',
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
+                padding: '20px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+              }}>
+                <h3 style={{ marginBottom: '10px', color: '#333' }}>Canvas Ready</h3>
+                <p style={{ marginBottom: '15px' }}>
+                  <strong>Paste</strong> an image or Figma link (Ctrl+V / Cmd+V)
+                </p>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  fontSize: '24px',
+                  color: '#999',
+                  marginBottom: '10px'
+                }}>
+                  <span role="img" aria-label="Paste">📋</span>
+                  <span style={{ margin: '0 10px' }}>or</span>
+                  <span role="img" aria-label="Figma">🖼️</span>
+                </div>
+                {figmaError && (
+                  <div style={{ 
+                    backgroundColor: '#ffebee', 
+                    color: '#d32f2f', 
+                    padding: '10px', 
+                    borderRadius: '4px',
+                    marginTop: '10px',
+                    border: '1px solid #ffcdd2'
+                  }}>
+                    <strong>Error:</strong> {figmaError}
+                  </div>
+                )}
+                {/* Debug info */}
+                <div style={{ 
+                  marginTop: '20px', 
+                  fontSize: '12px', 
+                  color: '#666', 
+                  textAlign: 'left',
+                  backgroundColor: '#f5f5f5',
+                  padding: '10px',
+                  borderRadius: '4px'
+                }}>
+                  <p><strong>Debug Info:</strong></p>
+                  <p>isLoadingFigma: {isLoadingFigma ? 'true' : 'false'}</p>
+                  <p>figmaError: {figmaError || 'none'}</p>
+                  <p>Try pasting a Figma URL with one of these formats:</p>
+                  <p>- https://www.figma.com/file/FILEID/FILENAME</p>
+                  <p>- https://www.figma.com/design/FILEID/FILENAME</p>
+                  <p><em>Note: Adding ?node-id=NODEID to the URL will fetch a specific frame (recommended)</em></p>
+                </div>
+              </div>
+            )}
+            
+            {/* Add the FigmaComponentsView when a Figma design is selected */}
+            {selectedIteration && selectedIteration.figmaData && selectedIteration.components && (
+              <FigmaComponentsView 
+                iteration={selectedIteration}
+                canvasScale={canvasScale}
+                canvasPosition={canvasPosition}
+              />
+            )}
+          </DesignContainer>
         </CanvasContent>
       </InfiniteCanvas>
 
@@ -1261,51 +1826,6 @@ export const Canvas = () => {
         />
       )}
 
-      {showIterationDialog && (
-        <IterationDialog>
-          <DialogContent>
-            <DialogTitle>Create New Iteration</DialogTitle>
-            <p>Provide instructions for improving the design:</p>
-            <DialogTextarea 
-              value={iterationPrompt}
-              onChange={(e) => setIterationPrompt(e.target.value)}
-              placeholder="E.g., Improve the color scheme, make the buttons more prominent, etc."
-              rows={4}
-            />
-            
-            <DialogButtons>
-              <DialogButton 
-                className="secondary" 
-                onClick={closeIterationDialog}
-              >
-                Cancel
-              </DialogButton>
-              <DialogButton 
-                className="primary" 
-                onClick={handleIterate}
-                disabled={isLoading}
-              >
-                {isLoading ? 'Creating...' : 'Generate Improved Design'}
-              </DialogButton>
-            </DialogButtons>
-          </DialogContent>
-        </IterationDialog>
-      )}
-
-      {error && (
-        <ErrorMessage>
-          {error}
-          <button onClick={() => setError(null)}>Dismiss</button>
-        </ErrorMessage>
-          )}
-          
-          {isLoading && (
-            <LoadingOverlay>
-          <div className="spinner"></div>
-          <p>Generating improved design...</p>
-            </LoadingOverlay>
-      )}
-
       {selectedIteration && (
         <SelectionHint>
           <HintIcon>👇</HintIcon>
@@ -1313,11 +1833,28 @@ export const Canvas = () => {
         </SelectionHint>
       )}
       
-      {!selectedIteration && iterations.length > 0 && !showPasteOverlay && (
+      {!selectedIteration && iterations.length > 0 && (
         <SelectionHint>
           <HintIcon>👆</HintIcon>
           Click a design to select it
         </SelectionHint>
+      )}
+
+      {/* Error message */}
+      {error && (
+        <ErrorOverlay>
+          <ErrorMessage>{error}</ErrorMessage>
+          <ActionButton onClick={() => setError(null)}>
+            Dismiss
+          </ActionButton>
+        </ErrorOverlay>
+      )}
+          
+      {isLoading && (
+        <LoadingOverlay>
+          <div className="spinner"></div>
+          <p>Generating improved design...</p>
+        </LoadingOverlay>
       )}
     </CanvasContainer>
   );
