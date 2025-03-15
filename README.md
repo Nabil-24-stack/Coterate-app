@@ -1,18 +1,18 @@
 # Coterate
 
-Coterate is a design iteration tool that functions similarly to Figma with a canvas-based UI. It allows users to paste Figma frame links and generate improved versions using AI.
+Coterate is a design iteration tool that functions similarly to Figma with a canvas-based UI. It allows users to paste UI designs and generate improved versions using AI.
 
 ## Features
 
 - Canvas interface for UI design interaction
-- Figma integration to import designs directly from Figma frames
+- Clipboard paste functionality to capture UI design images
 - Hover interaction with "Iterate" button for design improvement
 - AI-powered design improvement using OpenAI's GPT-4o and Stability AI's SDXL
 - Persona management for organizing different design iterations
 
 ## API Key Setup
 
-Coterate requires API keys from OpenAI, Stability AI, and Figma to function properly. Follow these steps to set up your API keys:
+Coterate requires API keys from OpenAI and Stability AI to function properly. Follow these steps to set up your API keys:
 
 ### Option 1: Using the Setup Script (Recommended)
 
@@ -47,14 +47,12 @@ The script will:
    ```
    REACT_APP_OPENAI_API_KEY=your_openai_api_key_here
    REACT_APP_STABILITY_API_KEY=your_stability_api_key_here
-   REACT_APP_FIGMA_ACCESS_TOKEN=your_figma_access_token_here
    ```
 
 ### Obtaining API Keys
 
 - **OpenAI API Key**: Sign up at [OpenAI Platform](https://platform.openai.com/api-keys)
 - **Stability AI API Key**: Sign up at [Stability AI](https://platform.stability.ai/)
-- **Figma API Access Token**: Generate a personal access token at [Figma Developer Settings](https://www.figma.com/developers/api#access-tokens)
 
 ### Security Best Practices
 
@@ -98,8 +96,8 @@ yarn start
 ## Usage
 
 1. Click "New Persona" to create a new design canvas
-2. Paste a Figma frame link into the input field or directly into the canvas (Ctrl+V or Cmd+V)
-3. Click "Load Figma Design" or press Enter to load the design
+2. Copy a screenshot of your UI design to your clipboard
+3. Paste the image into the canvas (Ctrl+V or Cmd+V)
 4. Hover over the image and click the "Iterate" button
 5. Wait for the AI to analyze and generate an improved design
 6. View the AI analysis by clicking the "View AI Analysis" button

@@ -1,9 +1,7 @@
 import React from 'react';
 import styled from 'styled-components';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { Canvas } from './components/Canvas';
-import FigmaDebug from './components/FigmaDebug';
 import { PageProvider } from './contexts/PageContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { useAuth } from './contexts/AuthContext';
@@ -20,20 +18,12 @@ const AppContainer = styled.div`
 
 const AuthenticatedApp = () => {
   return (
-    <Router>
-      <Routes>
-        <Route path="/figma-debug" element={<FigmaDebug />} />
-        <Route path="/" element={
-          <PageProvider>
-            <AppContainer>
-              <Sidebar />
-              <Canvas />
-            </AppContainer>
-          </PageProvider>
-        } />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
+    <PageProvider>
+      <AppContainer>
+        <Sidebar />
+        <Canvas />
+      </AppContainer>
+    </PageProvider>
   );
 };
 

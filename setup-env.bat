@@ -54,18 +54,6 @@ if "!stability_key!"=="" (
   echo Stability AI API key added to .env.local
 )
 
-REM Figma API Key
-set /p figma_key=Figma API Access Token: 
-if "!figma_key!"=="" (
-  echo Warning: No Figma API access token provided. You'll need to add it manually to .env.local
-) else (
-  REM Create a temporary file with the replacement
-  type .env.local | findstr /v "REACT_APP_FIGMA_ACCESS_TOKEN" > temp.env
-  echo REACT_APP_FIGMA_ACCESS_TOKEN=!figma_key!>> temp.env
-  move /y temp.env .env.local > nul
-  echo Figma API access token added to .env.local
-)
-
 echo.
 echo Setup complete!
 echo Your environment variables have been configured in .env.local

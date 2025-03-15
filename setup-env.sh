@@ -56,16 +56,6 @@ else
   echo -e "${GREEN}Stability AI API key added to .env.local${NC}"
 fi
 
-# Figma API Key
-read -p "Figma API Access Token: " figma_key
-if [ -z "$figma_key" ]; then
-  echo -e "${YELLOW}Warning: No Figma API access token provided. You'll need to add it manually to .env.local${NC}"
-else
-  # Replace the placeholder in .env.local
-  sed -i '' "s/REACT_APP_FIGMA_ACCESS_TOKEN=your_figma_access_token_here/REACT_APP_FIGMA_ACCESS_TOKEN=$figma_key/" .env.local
-  echo -e "${GREEN}Figma API access token added to .env.local${NC}"
-fi
-
 echo ""
 echo -e "${GREEN}Setup complete!${NC}"
 echo "Your environment variables have been configured in .env.local"

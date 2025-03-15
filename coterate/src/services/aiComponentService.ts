@@ -4,6 +4,7 @@
 import React from 'react';
 import { render } from 'react-dom';
 import html2canvas from 'html2canvas';
+import axios from 'axios';
 
 // Environment variables for API keys
 const OPENAI_API_KEY = process.env.REACT_APP_OPENAI_API_KEY;
@@ -35,6 +36,13 @@ interface DetectedComponent {
     state?: 'default' | 'hover' | 'active' | 'disabled';
     [key: string]: any;
   };
+}
+
+// Interface for component detection result
+interface ComponentResult {
+  components: DetectedComponent[];
+  image: string;
+  analysis: string;
 }
 
 interface ComponentImprovementSuggestion {
@@ -88,12 +96,42 @@ const checkOpenAIKey = () => {
 };
 
 /**
+ * Detect UI components in an image
+ * @param imageBase64 Base64 encoded image data
+ * @returns Object with detected components, image, and analysis
+ */
+export const detectComponents = async (imageBase64: string): Promise<ComponentResult> => {
+  try {
+    console.log('🔍 Starting component detection...');
+    
+    // Call the serverless function for component detection
+    const response = await axios.post('/api/detect-components', {
+      imageBase64
+    });
+    
+    return {
+      components: response.data.components,
+      image: response.data.image,
+      analysis: response.data.analysis
+    };
+  } catch (error) {
+    console.error('Error in component detection:', error);
+    
+    if (axios.isAxiosError(error) && error.response) {
+      throw new Error(error.response.data.error || error.message);
+    }
+    
+    throw new Error(`Failed to detect components: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
+
+/**
  * STEP 1: ENHANCED COMPONENT DETECTION
  * Uses GPT-4o with detailed prompting to precisely identify UI components
  * @param imageBase64 Base64 encoded image data
  * @returns Array of detected components with bounding boxes and initial classification
  */
-export const detectComponents = async (imageBase64: string): Promise<DetectedComponent[]> => {
+export const detectComponentsWithOpenAI = async (imageBase64: string): Promise<DetectedComponent[]> => {
   console.log('STEP 1: Detecting UI components within design...');
   
   try {
@@ -1691,7 +1729,7 @@ export const improveUIWithComponents = async (imageBase64: string): Promise<{
     
     // Step 1: Detect UI components in the image
     console.log('\n👁️ STEP 1: COMPONENT EXTRACTION & ANALYSIS');
-    const detectedComponents = await detectComponents(imageBase64);
+    const detectedComponents = await detectComponentsWithOpenAI(imageBase64);
     console.log(`✅ Detection complete: Found ${detectedComponents.length} components`);
     
     if (detectedComponents.length === 0) {

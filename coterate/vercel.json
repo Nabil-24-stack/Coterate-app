@@ -1,5 +1,6 @@
 {
   "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/static/(.*)", "dest": "/static/$1" },
     { "src": "/favicon.ico", "dest": "/favicon.ico" },
     { "src": "/logo192.png", "dest": "/logo192.png" },
@@ -7,5 +8,10 @@
     { "src": "/manifest.json", "dest": "/manifest.json" },
     { "src": "/asset-manifest.json", "dest": "/asset-manifest.json" },
     { "src": "/(.*)", "dest": "/index.html" }
-  ]
+  ],
+  "env": {
+    "OPENAI_API_KEY": "@openai_api_key",
+    "STABILITY_API_KEY": "@stability_api_key",
+    "FIGMA_ACCESS_TOKEN": "@figma_access_token"
+  }
 } 
