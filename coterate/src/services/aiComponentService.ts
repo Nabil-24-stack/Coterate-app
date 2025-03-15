@@ -761,7 +761,19 @@ async function extractComponentsData(contentText: string): Promise<ComponentsDat
     .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?\s*:/g, '"$2":') // Ensure property names are quoted
     .replace(/:\s*'([^']*)'/g, ':"$1"') // Replace single quotes with double quotes for values
     .replace(/[\u201C\u201D]/g, '"') // Replace curly quotes
-    .replace(/[\u2018\u2019]/g, "'"); // Replace curly apostrophes
+    .replace(/[\u2018\u2019]/g, "'") // Replace curly apostrophes
+    .replace(/,\s*}/g, '}') // Remove trailing commas before closing braces
+    .replace(/,\s*\]/g, ']') // Remove trailing commas before closing brackets
+    .replace(/([{,]\s*)([a-zA-Z0-9_]+)(\s*:)/g, '$1"$2"$3'); // Ensure property names are quoted
+  
+  // Fix specific issues we're seeing in the console
+  jsonText = jsonText
+    .replace(/:\s*"([^"]*),([^"]*)"/g, ':"$1,$2"') // Fix commas inside string values
+    .replace(/:\s*"([^"]*)\{([^"]*)"/g, ':"$1\\{$2"') // Escape curly braces inside string values
+    .replace(/:\s*"([^"]*)\}([^"]*)"/g, ':"$1\\}$2"') // Escape curly braces inside string values
+    .replace(/:\s*"([^"]*)\[([^"]*)"/g, ':"$1\\[$2"') // Escape square brackets inside string values
+    .replace(/:\s*"([^"]*)\]([^"]*)"/g, ':"$1\\]$2"') // Escape square brackets inside string values
+    .replace(/:\s*"([^"]*)"([^,}]*)/g, ':"$1"$2'); // Fix missing commas after string values
   
   console.log('Cleaned JSON text:', jsonText.substring(0, 100) + '...');
   
@@ -782,41 +794,78 @@ async function extractComponentsData(contentText: string): Promise<ComponentsDat
         const componentsMatch = jsonText.match(/"components"\s*:\s*(\[[\s\S]*?\])/);
         if (componentsMatch && componentsMatch[1]) {
           try {
-          const componentsArray = JSON.parse(componentsMatch[1]);
-          return { components: componentsArray };
+            // Fix potential JSON issues in the components array
+            let componentsText = componentsMatch[1]
+              .replace(/,\s*}/g, '}') // Remove trailing commas before closing braces
+              .replace(/,\s*\]/g, ']') // Remove trailing commas before closing brackets
+              .replace(/([{,]\s*)([a-zA-Z0-9_]+)(\s*:)/g, '$1"$2"$3') // Ensure property names are quoted
+              .replace(/:\s*"([^"]*),([^"]*)"/g, ':"$1,$2"') // Fix commas inside string values
+              .replace(/:\s*"([^"]*)\{([^"]*)"/g, ':"$1\\{$2"') // Escape curly braces inside string values
+              .replace(/:\s*"([^"]*)\}([^"]*)"/g, ':"$1\\}$2"'); // Escape curly braces inside string values
+            
+            const componentsArray = JSON.parse(componentsText);
+            return { components: componentsArray };
           } catch (e) {
             console.warn('Failed to parse components array:', e.message);
           }
         }
         
         // Fourth try: look for component-like structures
+        try {
           const componentMatches = jsonText.match(/\{\s*"type"\s*:\s*"[^"]+"/g);
           if (componentMatches && componentMatches.length > 0) {
             // Try to extract individual components and build a valid array
             const components = [];
             for (const match of componentMatches) {
-              const componentText = jsonText.substring(
-                jsonText.indexOf(match),
-                jsonText.indexOf('}', jsonText.indexOf(match)) + 1
-              );
               try {
-                const component = JSON.parse(componentText);
+                // Find the closing brace for this component object
+                const startIndex = jsonText.indexOf(match);
+                let braceCount = 0;
+                let endIndex = startIndex;
+                
+                for (let i = startIndex; i < jsonText.length; i++) {
+                  if (jsonText[i] === '{') braceCount++;
+                  if (jsonText[i] === '}') braceCount--;
+                  if (braceCount === 0) {
+                    endIndex = i + 1;
+                    break;
+                  }
+                }
+                
+                let componentText = jsonText.substring(startIndex, endIndex);
+                
+                // Fix the component JSON
+                const fixedComponentText = componentText
+                  .replace(/([{,]\s*)([a-zA-Z0-9_]+)(\s*:)/g, '$1"$2"$3') // Ensure property names are quoted
+                  .replace(/:\s*'([^']*)'/g, ':"$1"') // Replace single quotes with double quotes for values
+                  .replace(/,\s*}/g, '}') // Remove trailing commas
+                  .replace(/:\s*"([^"]*),([^"]*)"/g, ':"$1,$2"') // Fix commas inside string values
+                  .replace(/:\s*"([^"]*)\{([^"]*)"/g, ':"$1\\{$2"') // Escape curly braces inside string values
+                  .replace(/:\s*"([^"]*)\}([^"]*)"/g, ':"$1\\}$2"'); // Escape curly braces inside string values
+                
+                const component = JSON.parse(fixedComponentText);
                 components.push(component);
-              } catch (e) {
-                // Skip invalid components
-              console.warn('Failed to parse individual component:', e.message);
+              } catch (componentError) {
+                console.warn('Failed to parse individual component:', componentError.message);
+                // Continue to the next component
               }
             }
+            
             if (components.length > 0) {
+              console.log(`Successfully extracted ${components.length} components manually`);
               return { components };
             }
           }
+        } catch (structureError) {
+          console.warn('Failed to extract component structures:', structureError.message);
+        }
         
-        // If all parsing attempts fail, use fallback
-        console.error('All parsing attempts failed. Using fallback components.');
+        // Final fallback: use the fallback components
+        console.warn('All parsing attempts failed. Using fallback components.');
         return createFallbackComponentsData();
       } catch (error3) {
-        console.error('All parsing attempts failed. Using fallback components.');
+        console.warn('Third parsing attempt failed:', error3.message);
+        console.warn('Using fallback components.');
         return createFallbackComponentsData();
       }
     }

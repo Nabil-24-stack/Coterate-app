@@ -240,35 +240,46 @@ POLISH:
     // Ensure the image is properly formatted - remove data URL prefix if present
     const cleanedImage = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '');
     
-    // Try a different approach - using text-to-image endpoint instead of image-to-image
-    // This is a workaround for the image-to-image endpoint issues
+    // Resize the image to a supported dimension (1024x1024) before sending to Stability API
+    const resizedImageBase64 = await resizeImageToSupportedDimensions(cleanedImage);
+    
+    // Use image-to-image endpoint to maintain the original UI structure
     const response = await fetch(
-      `${apiHost}/v1/generation/${engine_id}/text-to-image`,
+      `${apiHost}/v1/generation/${engine_id}/image-to-image`,
       {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           Accept: 'application/json',
           Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({
-          text_prompts: [
-            {
-              text: prompt,
-              weight: 1.0,
-            },
-            {
-              text: "blurry, distorted, low quality, pixelated, poor design, amateurish, inconsistent layout",
-              weight: -1.0,
-            }
-          ],
-          cfg_scale: 7,
-          height: 1024,
-          width: 1024,
-          samples: 1,
-          steps: 30,
-          style_preset: "digital-art",
-        }),
+        body: (() => {
+          const formData = new FormData();
+          
+          // Convert base64 to blob
+          const byteCharacters = atob(resizedImageBase64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'image/png' });
+          
+          // Add the image to the form data
+          formData.append('init_image', blob);
+          
+          // Add other parameters
+          formData.append('text_prompts[0][text]', prompt);
+          formData.append('text_prompts[0][weight]', '1.0');
+          formData.append('text_prompts[1][text]', 'blurry, distorted, low quality, pixelated, poor design, amateurish, inconsistent layout');
+          formData.append('text_prompts[1][weight]', '-1.0');
+          formData.append('image_strength', '0.35'); // Lower value = more influence from original image
+          formData.append('cfg_scale', '7');
+          formData.append('samples', '1');
+          formData.append('steps', '30');
+          formData.append('style_preset', 'digital-art');
+          
+          return formData;
+        })(),
       }
     );
 
@@ -298,10 +309,8 @@ POLISH:
         throw new Error('Prompt exceeds character limit. Please use a shorter custom prompt.');
       } else if (error.message.includes('init_image')) {
         throw new Error('Invalid image format. Please use a valid PNG or JPEG image.');
-      } else if (error.message.includes('content-type')) {
-        throw new Error('Stability API requires multipart/form-data format. Using FormData to send the request.');
-      } else if (error.message.includes('bad_request')) {
-        throw new Error('Bad request to Stability API. Please check your image format and try again.');
+      } else if (error.message.includes('dimensions')) {
+        throw new Error('Image dimensions not supported. The application will automatically resize the image.');
       }
     }
     
@@ -309,6 +318,71 @@ POLISH:
     throw error;
   }
 };
+
+/**
+ * Resize an image to dimensions supported by Stability AI
+ * @param base64Image Base64 encoded image data (without data URL prefix)
+ * @returns Resized image as base64 string
+ */
+async function resizeImageToSupportedDimensions(base64Image: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // Create an image element to load the base64 image
+    const img = new Image();
+    img.onload = () => {
+      try {
+        // Create a canvas with the target dimensions (1024x1024)
+        const canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = 1024;
+        
+        // Get the canvas context and draw the image
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
+          return;
+        }
+        
+        // Fill the canvas with white background
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Calculate dimensions to maintain aspect ratio
+        const aspectRatio = img.width / img.height;
+        let drawWidth, drawHeight, offsetX, offsetY;
+        
+        if (aspectRatio > 1) {
+          // Image is wider than tall
+          drawWidth = 1024;
+          drawHeight = 1024 / aspectRatio;
+          offsetX = 0;
+          offsetY = (1024 - drawHeight) / 2;
+        } else {
+          // Image is taller than wide
+          drawHeight = 1024;
+          drawWidth = 1024 * aspectRatio;
+          offsetX = (1024 - drawWidth) / 2;
+          offsetY = 0;
+        }
+        
+        // Draw the image centered on the canvas
+        ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+        
+        // Convert the canvas to base64
+        const resizedBase64 = canvas.toDataURL('image/png').replace(/^data:image\/[a-z]+;base64,/, '');
+        resolve(resizedBase64);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    
+    img.onerror = () => {
+      reject(new Error('Failed to load image for resizing'));
+    };
+    
+    // Set the source of the image
+    img.src = `data:image/png;base64,${base64Image}`;
+  });
+}
 
 /**
  * Mock implementation for testing without API keys
