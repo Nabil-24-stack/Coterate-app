@@ -1,5 +1,8 @@
 {
   "buildCommand": "./build.sh",
   "outputDirectory": "coterate/build",
-  "framework": null
+  "framework": "create-react-app",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 } 
