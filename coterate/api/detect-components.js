@@ -1,7 +1,17 @@
-// Serverless function for UI component detection
+// Serverless function for component detection
 import axios from 'axios';
 
 export default async function handler(req, res) {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
   // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -9,10 +19,11 @@ export default async function handler(req, res) {
 
   try {
     // Get the OpenAI API key from environment variables
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY;
     
     if (!apiKey) {
-      return res.status(500).json({ error: 'OpenAI API key is missing' });
+      console.error('OpenAI API key is missing. Available env vars:', Object.keys(process.env).filter(key => !key.includes('NODE_') && !key.includes('npm_')));
+      return res.status(500).json({ error: 'OpenAI API key is missing. Please check your environment variables.' });
     }
 
     // Get the request body
@@ -23,27 +34,31 @@ export default async function handler(req, res) {
     }
 
     // Prepare the prompt for component detection
-    const prompt = `Analyze this UI design and identify all UI components present. 
+    const prompt = `Analyze this UI design and identify all UI components present in the image. 
 For each component, provide:
-1. Component type (button, input, card, navbar, etc.)
-2. Bounding box coordinates (approximate x, y, width, height as percentages of the image)
-3. Key attributes (color, text, state, etc.)
+1. Component type (e.g., Button, Input, Card, Navbar, etc.)
+2. Approximate position (x, y coordinates as percentages of the image width/height)
+3. Approximate size (width, height as percentages of the image width/height)
+4. Content or label text
+5. Style information (colors, borders, etc.)
 
-Format your response as a JSON array of components, each with:
-- type: string (the component type)
-- boundingBox: object with x, y, width, height (all as percentages 0-100)
-- attributes: object with relevant properties
-- confidence: number (0-1 indicating detection confidence)
-
-Example:
-[
-  {
-    "type": "button",
-    "boundingBox": { "x": 10, "y": 20, "width": 15, "height": 5 },
-    "attributes": { "text": "Submit", "backgroundColor": "blue", "state": "default" },
-    "confidence": 0.95
+Format your response as a JSON array of components, with each component having the following structure:
+{
+  "type": "string",
+  "x": number,
+  "y": number,
+  "width": number,
+  "height": number,
+  "content": "string",
+  "style": {
+    "backgroundColor": "string",
+    "textColor": "string",
+    "borderRadius": "string",
+    "borderColor": "string"
   }
-]`;
+}
+
+Be precise with the coordinates and dimensions. All values should be between 0 and 100 (as percentages).`;
 
     // Make the request to OpenAI API
     const response = await axios.post(
@@ -53,7 +68,7 @@ Example:
         messages: [
           {
             role: 'system',
-            content: 'You are a UI component detection system. Respond only with valid JSON.'
+            content: 'You are a UI component detection system. You analyze UI designs and identify components with their properties. Always respond with valid JSON.'
           },
           {
             role: 'user',
@@ -68,8 +83,8 @@ Example:
             ]
           }
         ],
-        response_format: { type: "json_object" },
-        max_tokens: 2000
+        max_tokens: 2000,
+        response_format: { type: "json_object" }
       },
       {
         headers: {
@@ -79,34 +94,32 @@ Example:
       }
     );
 
-    // Parse the JSON response
-    const content = response.data.choices[0].message.content;
+    // Parse the response to extract components
+    const responseContent = response.data.choices[0].message.content;
     let components;
     
     try {
-      const parsedResponse = JSON.parse(content);
-      components = parsedResponse.components || parsedResponse;
+      const parsedResponse = JSON.parse(responseContent);
+      components = parsedResponse.components || [];
       
-      // Ensure components is an array
       if (!Array.isArray(components)) {
-        components = [];
+        // If components is not an array, try to find an array in the response
+        const possibleArrays = Object.values(parsedResponse).filter(val => Array.isArray(val));
+        if (possibleArrays.length > 0) {
+          components = possibleArrays[0];
+        } else {
+          components = [];
+        }
       }
-      
-      // Generate unique IDs for each component
-      components = components.map((component, index) => ({
-        ...component,
-        id: `component-${Date.now()}-${index}`
-      }));
     } catch (parseError) {
-      console.error('Error parsing component detection response:', parseError);
+      console.error('Error parsing OpenAI response:', parseError);
       components = [];
     }
 
-    // Return the components and the original image
+    // Return the detected components
     return res.status(200).json({
-      components: components,
-      image: imageBase64,
-      analysis: 'Component detection completed successfully.'
+      components,
+      image: imageBase64
     });
   } catch (error) {
     console.error('Error in component detection:', error);

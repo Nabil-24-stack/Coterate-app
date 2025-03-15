@@ -2,6 +2,16 @@
 import axios from 'axios';
 
 export default async function handler(req, res) {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
   // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -9,15 +19,17 @@ export default async function handler(req, res) {
 
   try {
     // Get API keys from environment variables
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    const stabilityApiKey = process.env.STABILITY_API_KEY;
+    const openaiApiKey = process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY;
+    const stabilityApiKey = process.env.STABILITY_API_KEY || process.env.REACT_APP_STABILITY_API_KEY;
     
     if (!openaiApiKey) {
-      return res.status(500).json({ error: 'OpenAI API key is missing' });
+      console.error('OpenAI API key is missing. Available env vars:', Object.keys(process.env).filter(key => !key.includes('NODE_') && !key.includes('npm_')));
+      return res.status(500).json({ error: 'OpenAI API key is missing. Please check your environment variables.' });
     }
     
     if (!stabilityApiKey) {
-      return res.status(500).json({ error: 'Stability API key is missing' });
+      console.error('Stability API key is missing. Available env vars:', Object.keys(process.env).filter(key => !key.includes('NODE_') && !key.includes('npm_')));
+      return res.status(500).json({ error: 'Stability API key is missing. Please check your environment variables.' });
     }
 
     // Get the request body

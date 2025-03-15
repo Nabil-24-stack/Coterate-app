@@ -2,8 +2,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://ppzmwdcpllzcaefxfpll.supabase.co';
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwem13ZGNwbGx6Y2FlZnhmcGxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE2NjYzNzksImV4cCI6MjA1NzI0MjM3OX0.GgbPHs285VOnIAbfSDQSvAq-vJs9rheamn5HLdvmRxQ';
+const supabaseUrl = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || 'https://ppzmwdcpllzcaefxfpll.supabase.co';
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwem13ZGNwbGx6Y2FlZnhmcGxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE2NjYzNzksImV4cCI6MjA1NzI0MjM3OX0.GgbPHs285VOnIAbfSDQSvAq-vJs9rheamn5HLdvmRxQ';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Helper function to convert snake_case to camelCase
@@ -47,8 +47,18 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
   
+  // Only allow POST requests
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+  
   try {
+    console.log('Supabase API request received:', req.body);
     const { operation, table, data, id, userId } = req.body;
+    
+    if (!operation || !table) {
+      return res.status(400).json({ error: 'Operation and table are required' });
+    }
     
     // Perform the requested operation
     switch (operation) {
@@ -62,12 +72,17 @@ export default async function handler(req, res) {
         const { data: items, error: itemsError } = await query;
         
         if (itemsError) {
+          console.error('Supabase getItems error:', itemsError);
           return res.status(400).json({ error: itemsError.message });
         }
         
         return res.status(200).json({ data: snakeToCamel(items) });
         
       case 'getItem':
+        if (!id) {
+          return res.status(400).json({ error: 'Item ID is required' });
+        }
+        
         const { data: item, error: itemError } = await supabase
           .from(table)
           .select('*')
@@ -75,13 +90,19 @@ export default async function handler(req, res) {
           .single();
         
         if (itemError) {
+          console.error('Supabase getItem error:', itemError);
           return res.status(400).json({ error: itemError.message });
         }
         
         return res.status(200).json({ data: snakeToCamel(item) });
         
       case 'createItem':
+        if (!data) {
+          return res.status(400).json({ error: 'Item data is required' });
+        }
+        
         const snakeCaseData = camelToSnake(data);
+        console.log('Creating item with data:', snakeCaseData);
         
         const { data: createdItem, error: createError } = await supabase
           .from(table)
@@ -89,12 +110,21 @@ export default async function handler(req, res) {
           .select();
         
         if (createError) {
+          console.error('Supabase createItem error:', createError);
           return res.status(400).json({ error: createError.message });
         }
         
         return res.status(200).json({ data: snakeToCamel(createdItem) });
         
       case 'updateItem':
+        if (!id) {
+          return res.status(400).json({ error: 'Item ID is required' });
+        }
+        
+        if (!data) {
+          return res.status(400).json({ error: 'Update data is required' });
+        }
+        
         const snakeCaseUpdates = camelToSnake(data);
         
         const { data: updatedItem, error: updateError } = await supabase
@@ -104,18 +134,24 @@ export default async function handler(req, res) {
           .select();
         
         if (updateError) {
+          console.error('Supabase updateItem error:', updateError);
           return res.status(400).json({ error: updateError.message });
         }
         
         return res.status(200).json({ data: snakeToCamel(updatedItem) });
         
       case 'deleteItem':
+        if (!id) {
+          return res.status(400).json({ error: 'Item ID is required' });
+        }
+        
         const { error: deleteError } = await supabase
           .from(table)
           .delete()
           .eq('id', id);
         
         if (deleteError) {
+          console.error('Supabase deleteItem error:', deleteError);
           return res.status(400).json({ error: deleteError.message });
         }
         
