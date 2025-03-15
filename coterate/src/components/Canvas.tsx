@@ -1255,7 +1255,12 @@ export const Canvas = () => {
       <GlobalStyle />
       <CanvasHeader>
         <Logo>
-          <LogoIcon src="/Coterate logo.svg" alt="Coterate" />
+          <LogoIcon src={process.env.PUBLIC_URL + "/Coterate logo.svg"} alt="Coterate" onError={(e) => {
+            // Fallback to alternative logo if main logo fails to load
+            const target = e.target as HTMLImageElement;
+            target.onerror = null; // Prevent infinite loop
+            target.src = process.env.PUBLIC_URL + "/logo.svg";
+          }} />
           Coterate
         </Logo>
         
