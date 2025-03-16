@@ -32,9 +32,7 @@ export const signInWithFigma = async () => {
       redirectTo: `${window.location.origin}/auth/callback`,
       scopes: 'files:read files:write',
       queryParams: {
-        // Add additional parameters to help with CORS
-        response_type: 'code',
-        prompt: 'consent'
+        response_type: 'code'
       }
     }
   });

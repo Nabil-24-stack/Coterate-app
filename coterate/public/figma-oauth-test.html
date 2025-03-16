@@ -85,7 +85,8 @@
       authorizeButton.addEventListener('click', function() {
         // Replace these with your actual client ID and redirect URI
         const clientId = 'YOUR_FIGMA_CLIENT_ID';
-        const redirectUri = `${window.location.origin}/figma-oauth-test.html`;
+        // Use the Supabase callback URL
+        const redirectUri = 'https://ppzmwdcpllzcaefxfpll.supabase.co/auth/v1/callback';
         const state = Math.random().toString(36).substring(2);
         
         // Store state for verification
@@ -95,7 +96,7 @@
         const authUrl = new URL('https://www.figma.com/oauth');
         authUrl.searchParams.append('client_id', clientId);
         authUrl.searchParams.append('redirect_uri', redirectUri);
-        authUrl.searchParams.append('scope', 'files:read');
+        authUrl.searchParams.append('scope', 'files:read files:write');
         authUrl.searchParams.append('state', state);
         authUrl.searchParams.append('response_type', 'code');
         

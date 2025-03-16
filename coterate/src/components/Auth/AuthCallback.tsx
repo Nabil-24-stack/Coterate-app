@@ -50,7 +50,7 @@ const AuthCallback: React.FC = () => {
   const navigate = useNavigate();
   
   useEffect(() => {
-    // The hash contains the token information
+    // Handle the OAuth callback
     const handleAuthCallback = async () => {
       try {
         // Get the URL parameters
@@ -72,17 +72,11 @@ const AuthCallback: React.FC = () => {
           throw new Error(`${error}: ${errorDescription || 'Unknown error'}`);
         }
         
-        // Check if code is present
-        if (!code) {
-          setDebugInfo(JSON.stringify({
-            url: window.location.href,
-            params: Object.fromEntries(params.entries())
-          }, null, 2));
-          throw new Error('No authorization code found in the callback URL');
-        }
+        // For Supabase OAuth, we don't need to do anything special
+        // Supabase will handle the code exchange and session creation
+        // We just need to check if we have a session
         
-        // Supabase handles the OAuth callback automatically
-        // We just need to check if the user is authenticated
+        // Check if we have a session
         const { data, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
@@ -90,28 +84,48 @@ const AuthCallback: React.FC = () => {
         }
         
         if (data.session) {
+          console.log('Session found:', data.session);
           setMessage('Login successful! Redirecting...');
+          
           // Redirect to the main app after a short delay
           setTimeout(() => {
             navigate('/');
           }, 1500);
         } else {
-          // Try to exchange the code for a session
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          console.log('No session found, waiting for Supabase to process the callback...');
           
-          if (exchangeError) {
-            throw exchangeError;
-          } else {
-            setMessage('Login successful! Redirecting...');
-            // Redirect to the main app after a short delay
-            setTimeout(() => {
-              navigate('/');
-            }, 1500);
-          }
+          // Wait a bit and try again
+          setTimeout(async () => {
+            const { data: retryData, error: retryError } = await supabase.auth.getSession();
+            
+            if (retryError) {
+              throw retryError;
+            }
+            
+            if (retryData.session) {
+              console.log('Session found after retry:', retryData.session);
+              setMessage('Login successful! Redirecting...');
+              
+              // Redirect to the main app
+              setTimeout(() => {
+                navigate('/');
+              }, 1500);
+            } else {
+              // If we still don't have a session, something went wrong
+              throw new Error('Failed to get a session after OAuth callback. Please try again.');
+            }
+          }, 3000); // Wait 3 seconds before retrying
         }
       } catch (err: any) {
         console.error('Auth callback error:', err);
         setError(`Authentication failed: ${err.message || 'Unknown error'}`);
+        
+        // Add debug info
+        setDebugInfo(JSON.stringify({
+          url: window.location.href,
+          params: Object.fromEntries(new URLSearchParams(window.location.search).entries()),
+          error: err.message || 'Unknown error'
+        }, null, 2));
       }
     };
     
