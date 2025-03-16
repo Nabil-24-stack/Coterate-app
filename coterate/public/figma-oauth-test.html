@@ -96,7 +96,7 @@
         const authUrl = new URL('https://www.figma.com/oauth');
         authUrl.searchParams.append('client_id', clientId);
         authUrl.searchParams.append('redirect_uri', redirectUri);
-        authUrl.searchParams.append('scope', 'files:read files:write');
+        authUrl.searchParams.append('scope', 'files:read');
         authUrl.searchParams.append('state', state);
         authUrl.searchParams.append('response_type', 'code');
         

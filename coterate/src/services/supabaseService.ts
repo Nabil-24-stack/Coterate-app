@@ -30,7 +30,7 @@ export const signInWithFigma = async () => {
     provider: 'figma',
     options: {
       redirectTo: `${window.location.origin}/auth/callback`,
-      scopes: 'files:read files:write',
+      scopes: 'files:read',
       queryParams: {
         response_type: 'code'
       }
