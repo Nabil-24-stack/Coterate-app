@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { supabase } from './supabaseService';
 
 /**
  * Figma API Service
@@ -12,14 +13,15 @@ import axios from 'axios';
  */
 export const getFigmaUser = async (accessToken: string) => {
   try {
+    console.log('Getting Figma user with token:', accessToken ? 'Token exists' : 'No token');
     const response = await axios.get('https://api.figma.com/v1/me', {
       headers: {
         'Authorization': `Bearer ${accessToken}`
       }
     });
     return response.data;
-  } catch (error) {
-    console.error('Error fetching Figma user:', error);
+  } catch (error: any) {
+    console.error('Error fetching Figma user:', error.response?.data || error.message);
     throw error;
   }
 };
@@ -31,14 +33,15 @@ export const getFigmaUser = async (accessToken: string) => {
  */
 export const getFigmaFiles = async (accessToken: string) => {
   try {
+    console.log('Getting Figma files with token:', accessToken ? 'Token exists' : 'No token');
     const response = await axios.get('https://api.figma.com/v1/me/files', {
       headers: {
         'Authorization': `Bearer ${accessToken}`
       }
     });
     return response.data;
-  } catch (error) {
-    console.error('Error fetching Figma files:', error);
+  } catch (error: any) {
+    console.error('Error fetching Figma files:', error.response?.data || error.message);
     throw error;
   }
 };
@@ -51,14 +54,15 @@ export const getFigmaFiles = async (accessToken: string) => {
  */
 export const getFigmaFile = async (accessToken: string, fileKey: string) => {
   try {
+    console.log(`Getting Figma file ${fileKey} with token:`, accessToken ? 'Token exists' : 'No token');
     const response = await axios.get(`https://api.figma.com/v1/files/${fileKey}`, {
       headers: {
         'Authorization': `Bearer ${accessToken}`
       }
     });
     return response.data;
-  } catch (error) {
-    console.error('Error fetching Figma file:', error);
+  } catch (error: any) {
+    console.error('Error fetching Figma file:', error.response?.data || error.message);
     throw error;
   }
 };
@@ -78,6 +82,7 @@ export const getFigmaImages = async (
   format: 'jpg' | 'png' | 'svg' | 'pdf' = 'png'
 ) => {
   try {
+    console.log(`Getting Figma images for file ${fileKey} with token:`, accessToken ? 'Token exists' : 'No token');
     const response = await axios.get(
       `https://api.figma.com/v1/images/${fileKey}?ids=${nodeIds.join(',')}&format=${format}`, 
       {
@@ -87,32 +92,50 @@ export const getFigmaImages = async (
       }
     );
     return response.data;
-  } catch (error) {
-    console.error('Error fetching Figma images:', error);
+  } catch (error: any) {
+    console.error('Error fetching Figma images:', error.response?.data || error.message);
     throw error;
   }
 };
 
 /**
- * Get the access token from Supabase session
+ * Get the access token from the current session
  * @returns Figma access token or null if not available
  */
-export const getFigmaAccessToken = (): string | null => {
+export const getFigmaAccessToken = async (): Promise<string | null> => {
   try {
-    // Get the Supabase session from localStorage
-    const supabaseSession = localStorage.getItem('supabase.auth.token');
+    // Get the current session from Supabase
+    const { data, error } = await supabase.auth.getSession();
     
-    if (!supabaseSession) {
+    if (error) {
+      console.error('Error getting session:', error);
       return null;
     }
     
-    // Parse the session
-    const session = JSON.parse(supabaseSession);
+    // Check if we have a session and provider token
+    if (data.session?.provider_token) {
+      console.log('Found provider token in session');
+      return data.session.provider_token;
+    }
     
-    // Get the provider token from the session
-    const providerToken = session?.currentSession?.provider_token;
+    // If we don't have a provider token but have a session, try to refresh it
+    if (data.session) {
+      console.log('No provider token found, trying to refresh session');
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      
+      if (refreshError) {
+        console.error('Error refreshing session:', refreshError);
+        return null;
+      }
+      
+      if (refreshData.session?.provider_token) {
+        console.log('Found provider token after refresh');
+        return refreshData.session.provider_token;
+      }
+    }
     
-    return providerToken || null;
+    console.log('No provider token found');
+    return null;
   } catch (error) {
     console.error('Error getting Figma access token:', error);
     return null;

@@ -166,9 +166,22 @@ const Login: React.FC = () => {
   const handleFigmaLogin = async () => {
     setError(null);
     try {
-      const { error } = await signInWithFigma();
+      const { data, error } = await signInWithFigma();
       if (error) throw error;
+      
+      // If we get here without a redirect, something went wrong
+      console.log('Figma OAuth response:', data);
+      if (!data.url) {
+        throw new Error('No redirect URL received from Figma OAuth provider');
+      }
+      
+      // Log the URL we're redirecting to for debugging
+      console.log('Redirecting to Figma OAuth URL:', data.url);
+      
+      // Redirect to the Figma OAuth URL
+      window.location.href = data.url;
     } catch (err: any) {
+      console.error('Figma login error:', err);
       setError(err.message || 'An error occurred during Figma authentication');
     }
   };

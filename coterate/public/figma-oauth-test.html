@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Figma OAuth Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    button {
+      background-color: #1e1e1e;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    button:hover {
+      background-color: #000;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 15px;
+      border-radius: 4px;
+      overflow: auto;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Figma OAuth Test</h1>
+  <p>This page tests the Figma OAuth flow directly, bypassing Supabase.</p>
+  
+  <button id="authorize">
+    <img src="https://static.figma.com/app/icon/1/favicon.svg" width="20" height="20" alt="Figma logo">
+    Authorize with Figma
+  </button>
+  
+  <div class="result" id="result">
+    <p>Click the button above to start the OAuth flow.</p>
+  </div>
+  
+  <h2>Callback Results</h2>
+  <div class="result" id="callback-result">
+    <p>No callback data yet.</p>
+  </div>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const authorizeButton = document.getElementById('authorize');
+      const resultDiv = document.getElementById('result');
+      const callbackResultDiv = document.getElementById('callback-result');
+      
+      // Check if we're returning from an OAuth redirect
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const error = urlParams.get('error');
+      
+      if (code || error) {
+        callbackResultDiv.innerHTML = `
+          <h3>OAuth Callback Parameters</h3>
+          <pre>${JSON.stringify({
+            code: code || 'none',
+            error: error || 'none',
+            state: urlParams.get('state') || 'none',
+            allParams: Object.fromEntries(urlParams.entries())
+          }, null, 2)}</pre>
+        `;
+      }
+      
+      authorizeButton.addEventListener('click', function() {
+        // Replace these with your actual client ID and redirect URI
+        const clientId = 'YOUR_FIGMA_CLIENT_ID';
+        const redirectUri = `${window.location.origin}/figma-oauth-test.html`;
+        const state = Math.random().toString(36).substring(2);
+        
+        // Store state for verification
+        localStorage.setItem('figmaOAuthState', state);
+        
+        // Build the authorization URL
+        const authUrl = new URL('https://www.figma.com/oauth');
+        authUrl.searchParams.append('client_id', clientId);
+        authUrl.searchParams.append('redirect_uri', redirectUri);
+        authUrl.searchParams.append('scope', 'files:read');
+        authUrl.searchParams.append('state', state);
+        authUrl.searchParams.append('response_type', 'code');
+        
+        resultDiv.innerHTML = `
+          <h3>Redirecting to:</h3>
+          <pre>${authUrl.toString()}</pre>
+        `;
+        
+        // Redirect to Figma's authorization page
+        window.location.href = authUrl.toString();
+      });
+    });
+  </script>
+</body>
+</html> 

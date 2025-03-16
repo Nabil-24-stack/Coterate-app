@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { usePageContext } from '../contexts/PageContext';
 import { aiService } from '../services/aiService';
 import { DesignIteration, DetectedComponent } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import FigmaFilesSelector from './FigmaFilesSelector';
-import { getFigmaFile, getFigmaImages } from '../services/figmaService';
+import { getFigmaFile, getFigmaImages, getFigmaAccessToken } from '../services/figmaService';
 
 const FigmaExportContainer = styled.div`
   display: flex;
@@ -127,7 +127,7 @@ export const FigmaExport: React.FC<FigmaExportProps> = ({
   onClose 
 }) => {
   const { currentPage } = usePageContext();
-  const { session } = useAuth();
+  const { session, isFigmaConnected } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [figmaCode, setFigmaCode] = useState<string | null>(null);
@@ -135,6 +135,23 @@ export const FigmaExport: React.FC<FigmaExportProps> = ({
   const [activeTab, setActiveTab] = useState<'json' | 'figma'>('json');
   const [showFilesSelector, setShowFilesSelector] = useState(false);
   const [selectedFigmaFile, setSelectedFigmaFile] = useState<{ key: string, name: string } | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  
+  // Fetch the Figma access token when the component mounts
+  useEffect(() => {
+    const fetchAccessToken = async () => {
+      if (isFigmaConnected) {
+        try {
+          const token = await getFigmaAccessToken();
+          setAccessToken(token);
+        } catch (err) {
+          console.error('Error fetching Figma access token:', err);
+        }
+      }
+    };
+    
+    fetchAccessToken();
+  }, [isFigmaConnected]);
   
   // Simple function to convert components to JSON format
   const convertToExportFormat = (components: DetectedComponent[] | undefined) => {
@@ -185,8 +202,13 @@ export const FigmaExport: React.FC<FigmaExportProps> = ({
   };
 
   const handleExportToFigma = async () => {
-    if (!selectedFigmaFile || !session?.provider_token) {
-      setError('Please select a Figma file first or reconnect your Figma account.');
+    if (!selectedFigmaFile) {
+      setError('Please select a Figma file first.');
+      return;
+    }
+    
+    if (!accessToken) {
+      setError('Figma access token not found. Please reconnect your Figma account.');
       return;
     }
 
@@ -276,7 +298,7 @@ export const FigmaExport: React.FC<FigmaExportProps> = ({
             </div>
           )}
           
-          {!session?.provider_token ? (
+          {!isFigmaConnected ? (
             <div style={{ marginTop: '15px' }}>
               <p>You need to connect your Figma account to export designs to Figma.</p>
               <p>Please log out and sign in with Figma to enable this feature.</p>

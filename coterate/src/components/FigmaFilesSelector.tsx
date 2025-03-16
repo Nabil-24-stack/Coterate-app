@@ -104,7 +104,7 @@ const FigmaFilesSelector: React.FC<FigmaFilesSelectorProps> = ({ onFileSelect })
         setError(null);
         
         // Get the Figma access token
-        const accessToken = session?.provider_token;
+        const accessToken = await getFigmaAccessToken();
         
         if (!accessToken) {
           throw new Error('Figma access token not found. Please reconnect your Figma account.');
@@ -112,6 +112,7 @@ const FigmaFilesSelector: React.FC<FigmaFilesSelectorProps> = ({ onFileSelect })
         
         // Fetch files from Figma API
         const filesData = await getFigmaFiles(accessToken);
+        console.log('Figma files data:', filesData);
         
         if (filesData && filesData.projects) {
           // Transform the data to our format
