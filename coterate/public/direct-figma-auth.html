@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Direct Figma OAuth Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    button {
+      background-color: #1e1e1e;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    button:hover {
+      background-color: #000;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 15px;
+      border-radius: 4px;
+      overflow: auto;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .error {
+      color: #ef4444;
+      background-color: #fef2f2;
+      padding: 15px;
+      border-radius: 4px;
+      margin-top: 20px;
+    }
+    .success {
+      color: #10b981;
+      background-color: #ecfdf5;
+      padding: 15px;
+      border-radius: 4px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Direct Figma OAuth Test</h1>
+  <p>This page tests the Figma OAuth flow directly, without using Supabase.</p>
+  
+  <div>
+    <h2>Step 1: Configure OAuth</h2>
+    <form id="config-form">
+      <div style="margin-bottom: 15px;">
+        <label for="client-id" style="display: block; margin-bottom: 5px;">Figma Client ID:</label>
+        <input type="text" id="client-id" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" placeholder="Enter your Figma Client ID">
+      </div>
+      
+      <div style="margin-bottom: 15px;">
+        <label for="redirect-uri" style="display: block; margin-bottom: 5px;">Redirect URI:</label>
+        <input type="text" id="redirect-uri" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" value="">
+      </div>
+      
+      <button type="button" id="authorize" disabled>
+        <img src="https://static.figma.com/app/icon/1/favicon.svg" width="20" height="20" alt="Figma logo">
+        Authorize with Figma
+      </button>
+    </form>
+  </div>
+  
+  <div class="result" id="result">
+    <p>Enter your Figma Client ID and click the button above to start the OAuth flow.</p>
+  </div>
+  
+  <h2>Callback Results</h2>
+  <div class="result" id="callback-result">
+    <p>No callback data yet.</p>
+  </div>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const authorizeButton = document.getElementById('authorize');
+      const clientIdInput = document.getElementById('client-id');
+      const redirectUriInput = document.getElementById('redirect-uri');
+      const resultDiv = document.getElementById('result');
+      const callbackResultDiv = document.getElementById('callback-result');
+      
+      // Set the default redirect URI to the current page
+      redirectUriInput.value = window.location.href;
+      
+      // Enable the authorize button when client ID is entered
+      clientIdInput.addEventListener('input', function() {
+        authorizeButton.disabled = !clientIdInput.value.trim();
+      });
+      
+      // Check if we're returning from an OAuth redirect
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const error = urlParams.get('error');
+      
+      if (code || error) {
+        if (error) {
+          callbackResultDiv.innerHTML = `
+            <div class="error">
+              <h3>OAuth Error</h3>
+              <p>${error}: ${urlParams.get('error_description') || 'No description provided'}</p>
+            </div>
+          `;
+        } else {
+          callbackResultDiv.innerHTML = `
+            <div class="success">
+              <h3>OAuth Success</h3>
+              <p>Authorization code received! In a real application, you would exchange this code for an access token.</p>
+            </div>
+          `;
+        }
+        
+        callbackResultDiv.innerHTML += `
+          <h3>OAuth Callback Parameters</h3>
+          <pre>${JSON.stringify({
+            code: code || 'none',
+            error: error || 'none',
+            state: urlParams.get('state') || 'none',
+            allParams: Object.fromEntries(urlParams.entries())
+          }, null, 2)}</pre>
+        `;
+      }
+      
+      authorizeButton.addEventListener('click', function() {
+        const clientId = clientIdInput.value.trim();
+        const redirectUri = redirectUriInput.value.trim();
+        
+        if (!clientId) {
+          resultDiv.innerHTML = `
+            <div class="error">
+              <p>Please enter your Figma Client ID.</p>
+            </div>
+          `;
+          return;
+        }
+        
+        if (!redirectUri) {
+          resultDiv.innerHTML = `
+            <div class="error">
+              <p>Please enter a redirect URI.</p>
+            </div>
+          `;
+          return;
+        }
+        
+        const state = Math.random().toString(36).substring(2);
+        
+        // Store state for verification
+        localStorage.setItem('figmaOAuthState', state);
+        
+        // Build the authorization URL
+        const authUrl = new URL('https://www.figma.com/oauth');
+        authUrl.searchParams.append('client_id', clientId);
+        authUrl.searchParams.append('redirect_uri', redirectUri);
+        authUrl.searchParams.append('scope', 'files:read');
+        authUrl.searchParams.append('state', state);
+        authUrl.searchParams.append('response_type', 'code');
+        
+        resultDiv.innerHTML = `
+          <h3>Redirecting to:</h3>
+          <pre>${authUrl.toString()}</pre>
+        `;
+        
+        // Redirect to Figma's authorization page
+        window.location.href = authUrl.toString();
+      });
+    });
+  </script>
+</body>
+</html> 

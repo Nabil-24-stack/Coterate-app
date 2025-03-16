@@ -72,11 +72,35 @@ const AuthCallback: React.FC = () => {
           throw new Error(`${error}: ${errorDescription || 'Unknown error'}`);
         }
         
-        // For Supabase OAuth, we don't need to do anything special
-        // Supabase will handle the code exchange and session creation
-        // We just need to check if we have a session
+        // If we have a code, we need to manually exchange it for a session
+        if (code) {
+          console.log('Exchanging code for session...');
+          
+          try {
+            // Try to exchange the code for a session
+            const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+            
+            if (exchangeError) {
+              throw exchangeError;
+            }
+            
+            if (data?.session) {
+              console.log('Session created successfully');
+              setMessage('Login successful! Redirecting...');
+              
+              // Redirect to the main app after a short delay
+              setTimeout(() => {
+                navigate('/');
+              }, 1500);
+              return;
+            }
+          } catch (exchangeErr: any) {
+            console.error('Error exchanging code for session:', exchangeErr);
+            // Continue to check for session below
+          }
+        }
         
-        // Check if we have a session
+        // Check if we already have a session (Supabase might have handled it automatically)
         const { data, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {

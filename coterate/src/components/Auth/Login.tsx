@@ -165,24 +165,23 @@ const Login: React.FC = () => {
 
   const handleFigmaLogin = async () => {
     setError(null);
+    setLoading(true);
+    
     try {
-      const { data, error } = await signInWithFigma();
+      // Call the signInWithFigma function
+      // The redirect is now handled in the function itself
+      const { error } = await signInWithFigma();
+      
       if (error) throw error;
       
-      // If we get here without a redirect, something went wrong
-      console.log('Figma OAuth response:', data);
-      if (!data.url) {
-        throw new Error('No redirect URL received from Figma OAuth provider');
-      }
-      
-      // Log the URL we're redirecting to for debugging
-      console.log('Redirecting to Figma OAuth URL:', data.url);
-      
-      // Redirect to the Figma OAuth URL
-      window.location.href = data.url;
+      // If we get here, it means the redirect didn't happen
+      // This should not normally happen with skipBrowserRedirect: true
+      setError('Failed to redirect to Figma. Please try again.');
     } catch (err: any) {
       console.error('Figma login error:', err);
       setError(err.message || 'An error occurred during Figma authentication');
+    } finally {
+      setLoading(false);
     }
   };
 

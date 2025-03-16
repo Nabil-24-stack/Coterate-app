@@ -34,15 +34,21 @@ This guide will help you set up Figma OAuth authentication with Supabase for the
    REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key
    ```
 
-2. Ensure your application is using the correct redirect URL in the Figma OAuth flow:
+2. Ensure your application is using the correct OAuth configuration in the Figma OAuth flow:
    ```javascript
    const { data, error } = await supabase.auth.signInWithOAuth({
      provider: 'figma',
      options: {
        redirectTo: `${window.location.origin}/auth/callback`,
-       scopes: 'files:read'
+       scopes: 'files:read',
+       skipBrowserRedirect: true // Get the URL instead of redirecting automatically
      }
    });
+   
+   // If we have a URL, redirect manually
+   if (data?.url) {
+     window.location.href = data.url;
+   }
    ```
 
 ## 4. Testing the OAuth Flow
@@ -50,20 +56,36 @@ This guide will help you set up Figma OAuth authentication with Supabase for the
 1. Make sure your application has a route set up to handle the callback at `/auth/callback`
 2. Try signing in with Figma from your application
 3. Check the browser console for any errors
-4. If you encounter CORS errors, make sure:
-   - Your Figma OAuth app has the correct redirect URL
-   - Your Supabase project has the correct Figma OAuth configuration
-   - Your application is using the correct Supabase URL and anon key
+4. If you encounter CORS errors, try using the direct test page at `/direct-figma-auth.html`
 
-## 5. Troubleshooting
+## 5. Troubleshooting CORS Issues
 
-If you're still having issues with the OAuth flow, try the following:
+If you're experiencing CORS errors when using Figma OAuth, try these solutions:
 
-1. Check the Network tab in your browser's developer tools to see the exact requests and responses
-2. Look for any error messages in the URL parameters when redirected back to your application
-3. Verify that your Figma OAuth app has the correct redirect URL
-4. Make sure your Supabase project has the correct Figma OAuth configuration
-5. Try using the `/figma-oauth-test.html` page to test the direct OAuth flow
+1. **Use the Direct Test Page**: 
+   - Open `/direct-figma-auth.html` in your browser
+   - Enter your Figma Client ID
+   - Use the page URL itself as the redirect URI
+   - This bypasses Supabase and tests the Figma OAuth flow directly
+
+2. **Check Browser Extensions**:
+   - Disable any ad blockers or privacy extensions that might be blocking requests to Figma
+   - Try using an incognito/private browsing window
+
+3. **Verify Redirect URI**:
+   - Make sure the redirect URI in your Figma app settings exactly matches the one you're using
+   - For Supabase, this should be: `https://ppzmwdcpllzcaefxfpll.supabase.co/auth/v1/callback`
+
+4. **Manual Code Exchange**:
+   - If the authorization code is received but session creation fails, try manually exchanging the code:
+   ```javascript
+   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+   ```
+
+5. **Check Network Requests**:
+   - Use the Network tab in your browser's developer tools
+   - Look for requests to Figma's API endpoints
+   - Check for any blocked requests or CORS errors
 
 ## 6. Important Notes
 
@@ -71,4 +93,5 @@ If you're still having issues with the OAuth flow, try the following:
 - You must use the exact same callback URL in both Figma and Supabase
 - The callback URL must be an exact match, including the protocol (https://) and any trailing slashes
 - Figma OAuth requires HTTPS for production applications
-- Figma only supports the `files:read` scope for OAuth, not `files:write` 
+- Figma only supports the `files:read` scope for OAuth, not `files:write`
+- If you continue to experience CORS issues, consider using a server-side OAuth flow instead of client-side 

@@ -31,11 +31,14 @@ export const signInWithFigma = async () => {
     options: {
       redirectTo: `${window.location.origin}/auth/callback`,
       scopes: 'files:read',
-      queryParams: {
-        response_type: 'code'
-      }
+      skipBrowserRedirect: true
     }
   });
+  
+  if (data?.url) {
+    window.location.href = data.url;
+  }
+  
   return { data, error };
 };
 
