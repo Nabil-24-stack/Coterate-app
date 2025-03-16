@@ -24,6 +24,18 @@ export const signIn = async (email: string, password: string) => {
   return { data, error };
 };
 
+// Sign in with Figma OAuth
+export const signInWithFigma = async () => {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'figma',
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback`,
+      scopes: 'files:read'
+    }
+  });
+  return { data, error };
+};
+
 export const signOut = async () => {
   const { error } = await supabase.auth.signOut();
   return { error };
