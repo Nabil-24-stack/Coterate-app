@@ -88,55 +88,8 @@ const SwitchMode = styled.p`
   }
 `;
 
-const Divider = styled.div`
-  display: flex;
-  align-items: center;
-  margin: 1rem 0;
-  width: 100%;
-  
-  &::before, &::after {
-    content: '';
-    flex: 1;
-    border-bottom: 1px solid #e3e6ea;
-  }
-  
-  span {
-    padding: 0 0.5rem;
-    color: #6b7280;
-    font-size: 0.875rem;
-  }
-`;
-
-const SocialButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: 0.75rem 1rem;
-  background-color: white;
-  color: #333;
-  border: 1px solid #e3e6ea;
-  border-radius: 4px;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  margin-bottom: 1rem;
-  
-  &:hover {
-    background-color: #f9fafb;
-    border-color: #d1d5db;
-  }
-  
-  img {
-    width: 20px;
-    height: 20px;
-    margin-right: 0.75rem;
-  }
-`;
-
 const Login: React.FC = () => {
-  const { signIn, signUp, signInWithFigma } = useAuth();
+  const { signIn, signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -163,40 +116,9 @@ const Login: React.FC = () => {
     }
   };
 
-  const handleFigmaLogin = async () => {
-    setError(null);
-    setLoading(true);
-    
-    try {
-      // Call the signInWithFigma function
-      // The redirect is now handled in the function itself
-      const { error } = await signInWithFigma();
-      
-      if (error) throw error;
-      
-      // If we get here, it means the redirect didn't happen
-      // This should not normally happen with skipBrowserRedirect: true
-      setError('Failed to redirect to Figma. Please try again.');
-    } catch (err: any) {
-      console.error('Figma login error:', err);
-      setError(err.message || 'An error occurred during Figma authentication');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <LoginContainer>
       <Title>{isSignUp ? 'Create an Account' : 'Sign In'}</Title>
-      
-      <SocialButton type="button" onClick={handleFigmaLogin}>
-        <img src="https://static.figma.com/app/icon/1/favicon.svg" alt="Figma logo" />
-        Continue with Figma
-      </SocialButton>
-      
-      <Divider>
-        <span>OR</span>
-      </Divider>
       
       <Form onSubmit={handleSubmit}>
         {error && <ErrorMessage>{error}</ErrorMessage>}

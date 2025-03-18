@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase, signIn, signUp, signOut, getCurrentUser, getSession, signInWithFigma } from '../services/supabaseService';
+import { supabase, signIn, signUp, signOut, getCurrentUser, getSession } from '../services/supabaseService';
 
 interface AuthContextType {
   user: User | null;
@@ -8,9 +8,7 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ data: any; error: any }>;
   signUp: (email: string, password: string) => Promise<{ data: any; error: any }>;
-  signInWithFigma: () => Promise<{ data: any; error: any }>;
   signOut: () => Promise<{ error: any }>;
-  isFigmaConnected: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,7 +29,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isFigmaConnected, setIsFigmaConnected] = useState(false);
 
   useEffect(() => {
     // Check for active session on mount
@@ -45,9 +42,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           console.error('Error getting session:', sessionError);
         } else {
           setSession(currentSession);
-          
-          // Check if the user is connected to Figma
-          setIsFigmaConnected(!!currentSession?.provider_token);
           
           if (currentSession) {
             // Get user data if we have a session
@@ -73,7 +67,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       async (event, newSession) => {
         setSession(newSession);
         setUser(newSession?.user ?? null);
-        setIsFigmaConnected(!!newSession?.provider_token);
       }
     );
 
@@ -89,9 +82,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading,
     signIn,
     signUp,
-    signInWithFigma,
-    signOut,
-    isFigmaConnected
+    signOut
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

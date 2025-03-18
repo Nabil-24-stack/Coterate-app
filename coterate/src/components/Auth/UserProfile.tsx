@@ -35,25 +35,6 @@ const UserEmail = styled.span`
 const UserType = styled.span`
   font-size: 12px;
   color: #6b7280;
-  display: flex;
-  align-items: center;
-`;
-
-const FigmaBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  background-color: #1e1e1e;
-  color: white;
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin-left: 6px;
-  
-  img {
-    width: 10px;
-    height: 10px;
-    margin-right: 4px;
-  }
 `;
 
 const DropdownMenu = styled.div<{ isOpen: boolean }>`
@@ -88,7 +69,7 @@ const MenuItem = styled.div`
 `;
 
 const UserProfile: React.FC = () => {
-  const { user, signOut, isFigmaConnected } = useAuth();
+  const { user, signOut } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -130,15 +111,7 @@ const UserProfile: React.FC = () => {
       <ProfileContainer ref={profileRef} onClick={toggleMenu}>
         <UserInfo>
           <UserEmail>{user.email}</UserEmail>
-          <UserType>
-            Free
-            {isFigmaConnected && (
-              <FigmaBadge>
-                <img src="https://static.figma.com/app/icon/1/favicon.svg" alt="Figma" />
-                Figma
-              </FigmaBadge>
-            )}
-          </UserType>
+          <UserType>Free</UserType>
         </UserInfo>
       </ProfileContainer>
       
