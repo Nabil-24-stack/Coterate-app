@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { retryDatabaseSetup } from '../../setupDatabase';
 
 const LoginContainer = styled.div`
   display: flex;
@@ -89,12 +91,21 @@ const SwitchMode = styled.p`
 `;
 
 const Login: React.FC = () => {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, user } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Check if user is already logged in
+  useEffect(() => {
+    if (user) {
+      navigate('/');
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,11 +116,23 @@ const Login: React.FC = () => {
       if (isSignUp) {
         const { error } = await signUp(email, password);
         if (error) throw error;
+        
+        // Show success message for sign up
+        setError("Registration successful! Please check your email to confirm your account.");
+        setLoading(false);
+        return;
       } else {
         const { error } = await signIn(email, password);
         if (error) throw error;
+        
+        // If login is successful, try to setup the database
+        await retryDatabaseSetup();
+        
+        // Redirect to home page after successful login
+        navigate('/');
       }
     } catch (err: any) {
+      console.error('Authentication error:', err);
       setError(err.message || 'An error occurred during authentication');
     } finally {
       setLoading(false);
