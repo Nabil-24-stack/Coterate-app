@@ -1,4 +1,8 @@
 {
+  "version": 2,
+  "buildCommand": "cd coterate && npm run build",
+  "outputDirectory": "coterate/build",
+  "installCommand": "cd coterate && npm install",
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/static/(.*)", "dest": "/static/$1" },
