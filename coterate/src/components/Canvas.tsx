@@ -545,6 +545,20 @@ const ErrorOverlay = styled.div`
   z-index: 1000;
 `;
 
+// Add this function before the Canvas component
+const promptForOpenAIKey = (): Promise<string | null> => {
+  return new Promise((resolve) => {
+    const key = prompt('Please enter your OpenAI API key to use the component improvement feature.\n\nThis will be stored locally in your browser and never sent to our servers.');
+    if (key && key.trim().length > 20) {
+      // Store the key in localStorage
+      localStorage.setItem('openai_api_key', key.trim());
+      resolve(key.trim());
+    } else {
+      resolve(null);
+    }
+  });
+};
+
 // Canvas component
 export const Canvas = () => {
   const { currentPage, updatePage } = usePageContext();
@@ -1373,6 +1387,30 @@ export const Canvas = () => {
       } catch (componentError) {
         const errorMsg = handleApiError(componentError, 'Component-based UI improvement');
         console.warn(errorMsg);
+        
+        // Check if this is a missing API key error
+        if (componentError instanceof Error && componentError.message === 'OPENAI_KEY_MISSING') {
+          const key = await promptForOpenAIKey();
+          if (key) {
+            // If user provided a key, try again
+            console.log('API key provided, retrying operation...');
+            try {
+              const componentResult = await aiComponentService.improveUIWithComponents(imageBase64);
+              console.log('Component-based UI improvement complete after retry:', componentResult);
+              
+              // Continue with the rest of the function using the componentResult...
+              // (Keep the existing code for handling componentResult)
+              
+              return; // Exit the function if successful
+            } catch (retryError) {
+              console.error('Still failed after API key was provided:', retryError);
+              // Continue to fallback
+            }
+          } else {
+            console.log('User did not provide an API key, using fallback approach');
+          }
+        }
+        
         // Continue to fallback
       }
       
