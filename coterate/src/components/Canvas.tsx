@@ -7,6 +7,7 @@ import { usePageContext } from '../contexts/PageContext';
 import { generateImprovedUIDesign, aiService } from '../services/aiService';
 import { FigmaExport } from './FigmaExport';
 import { DesignIteration, DetectedComponent } from '../types';
+import axios from 'axios';
 
 // Global style to remove focus outlines and borders
 const GlobalStyle = createGlobalStyle`
@@ -1257,10 +1258,81 @@ export const Canvas = () => {
     setError(null);
     
     try {
-      // Get the selected iteration image
-      console.log('Using enhanced method for design improvement');
+      // Get the base64 image data from the selected iteration
+      const imageBase64 = selectedIteration.image.split(',')[1] || selectedIteration.image;
       
-      // Apply transformations to the image to create a visually improved version
+      console.log('Starting UI design improvement process using component-based approach...');
+
+      // First attempt - try to use the component-based UI improvement process
+      try {
+        // This will go through the multi-step process:
+        // 1. Component extraction using OpenAI
+        // 2. Component analysis and improvement suggestions
+        // 3. Applying improvements with design consistency
+        // 4. Generating visual comparison
+        const componentResult = await aiComponentService.improveUIWithComponents(imageBase64);
+        
+        console.log('Component-based UI improvement complete:', componentResult);
+        
+        // If we have component results with HTML report, we can generate an improved image
+        // For now, we'll try to use the improve-ui endpoint which will use OpenAI and Stability AI
+        try {
+          // Call the serverless API to get an OpenAI analysis and Stability AI image
+          const response = await axios.post('/api/improve-ui', {
+            imageBase64: imageBase64,
+            customPrompt: JSON.stringify(componentResult.analysis)
+          });
+          
+          // Create a new iteration with the improved design
+          const newIteration: DesignIteration = {
+            id: `improved-${currentPage.id}-${Date.now()}`,
+            image: response.data.image,
+            label: `Improved ${selectedIteration.iterationNumber + 1}`,
+            iterationType: 'improved',
+            iterationNumber: selectedIteration.iterationNumber + 1,
+            analysis: response.data.analysis,
+            components: componentResult.analysis.improvements.map(imp => ({
+              id: `comp-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+              type: imp.componentType,
+              confidence: 0.95,
+              boundingBox: { x: 0, y: 0, width: 0, height: 0 },
+              attributes: imp.improvements
+            })),
+            position: { 
+              x: (selectedIteration.position?.x || 0) + 50, 
+              y: (selectedIteration.position?.y || 0) + 50 
+            }
+          };
+          
+          // Update the page with the improved image
+          if (selectedIteration.iterationType === 'base') {
+            updatePage(currentPage.id, { iteratedImage: response.data.image });
+          }
+          
+          // Add the new iteration to the map
+          setIterationsMap(prev => ({
+            ...prev,
+            [currentPage.id]: [...(prev[currentPage.id] || []), newIteration]
+          }));
+          
+          // Select the new iteration
+          setSelectedIteration(newIteration);
+          
+          console.log('Successfully generated improved UI design with AI services');
+          return;
+        } catch (apiError) {
+          console.warn('API-based UI improvement failed, falling back to canvas-based approach:', apiError);
+          // Continue to fallback
+        }
+      } catch (componentError) {
+        console.warn('Component-based UI improvement failed:', componentError);
+        // Continue to fallback
+      }
+      
+      // Fallback - Use canvas-based visual enhancement if the component approach fails
+      console.log('Using fallback canvas-based approach for design improvement');
+      
+      // Apply a series of visual enhancements to the image
       const canvas = document.createElement('canvas');
       const img = new Image();
       
@@ -1361,7 +1433,7 @@ export const Canvas = () => {
       
       // Create an analysis message with what was improved
       const analysisText = `
-# UI Design Improvements
+# UI Design Improvements (Canvas Fallback)
 
 ## Changes Made:
 1. **Enhanced Contrast**: Improved visual hierarchy and readability by increasing contrast between elements.
@@ -1370,10 +1442,10 @@ export const Canvas = () => {
 4. **Visual Harmony**: Applied a refined gradient overlay for improved visual appeal.
 5. **Edge Enhancement**: Improved border definition between UI components.
 
-This iteration focuses on enhancing the visual appeal while maintaining the original layout and functionality.
+This iteration uses a local canvas-based enhancement approach as a fallback when API services are unavailable.
       `;
       
-      // Add a new iteration for the improved design
+      // Add a new iteration for the improved design with the fallback approach
       const newIteration: DesignIteration = {
         id: `improved-${currentPage.id}-${Date.now()}`,
         image: improvedImageDataUrl,
@@ -1402,7 +1474,7 @@ This iteration focuses on enhancing the visual appeal while maintaining the orig
       // Select the new iteration
       setSelectedIteration(newIteration);
       
-      console.log('Successfully generated improved UI design');
+      console.log('Successfully generated improved UI design with canvas fallback');
       
     } catch (error) {
       console.error('Error during iteration:', error);
