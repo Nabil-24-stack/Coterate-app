@@ -4,6 +4,17 @@
   "outputDirectory": "coterate/build",
   "installCommand": "cd coterate && npm install",
   "routes": [
+    { 
+      "src": "/api/get-keys", 
+      "dest": "/api/get-keys.js",
+      "methods": ["GET", "OPTIONS"],
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+        "Content-Type": "application/json"
+      }
+    },
     { "src": "/api/(.*)", "dest": "/api/$1", "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"] },
     { "src": "/static/(.*)", "dest": "/static/$1" },
     { "src": "/favicon.ico", "dest": "/favicon.ico" },
