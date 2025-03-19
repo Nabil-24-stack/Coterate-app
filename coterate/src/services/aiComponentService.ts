@@ -76,27 +76,42 @@ interface ComponentsData {
 }
 
 // Add a helper function to check if the API key is valid
-const checkOpenAIKey = () => {
-  // Try to get the API key from various environment variables - both React app and serverless
-  // The Vercel deployment will generally use OPENAI_API_KEY rather than REACT_APP_ prefix
-  const apiKey = process.env.REACT_APP_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
-  
-  if (!apiKey) {
+const checkOpenAIKey = async () => {
+  try {
+    // First try the direct environment variable approach (for local development)
+    const localApiKey = process.env.REACT_APP_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+    
+    if (localApiKey && localApiKey.toString().length > 20) {
+      // Clean up the API key by removing any quotes, spaces, or line breaks
+      const cleanedApiKey = localApiKey.toString()
+        .replace(/["']/g, '') // Remove quotes
+        .replace(/\s+/g, '')  // Remove whitespace including line breaks
+        .trim();              // Trim any remaining whitespace
+      
+      if (cleanedApiKey !== 'your-openai-api-key-here' && cleanedApiKey !== 'your_openai_api_key_here') {
+        return cleanedApiKey;
+      }
+    }
+    
+    // If local key is not available or valid, try to get it from the server
+    console.log('Local OpenAI API key not found, trying to fetch from server...');
+    const response = await fetch('/api/get-keys');
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch API key from server: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.openaiKey) {
+      throw new Error('OpenAI API key not provided by the server');
+    }
+    
+    return data.openaiKey;
+  } catch (error) {
+    console.error('Error retrieving OpenAI API key:', error);
     throw new Error('OpenAI API key is missing or invalid. Please add a valid OPENAI_API_KEY to your environment variables.');
   }
-  
-  // Clean up the API key by removing any quotes, spaces, or line breaks
-  const cleanedApiKey = apiKey.toString()
-    .replace(/["']/g, '') // Remove quotes
-    .replace(/\s+/g, '')  // Remove whitespace including line breaks
-    .trim();              // Trim any remaining whitespace
-  
-  if (cleanedApiKey === 'your-openai-api-key-here' || cleanedApiKey === 'your_openai_api_key_here') {
-    throw new Error('Please replace the placeholder API key with your actual OpenAI API key in the environment variables.');
-  }
-  
-  // Return the cleaned key for use
-  return cleanedApiKey;
 };
 
 /**
@@ -109,7 +124,6 @@ export const detectComponents = async (imageBase64: string): Promise<ComponentRe
   
   try {
     // Try to use OpenAI for component detection
-    /* Commenting out the OpenAI API calls to avoid errors
     try {
       console.log('Using OpenAI for component detection');
       const components = await detectComponentsWithOpenAI(imageBase64);
@@ -124,31 +138,35 @@ export const detectComponents = async (imageBase64: string): Promise<ComponentRe
       console.error('❌ Error in component detection step:', error);
       console.log('Retrying component detection with alternative approach...');
       
-      // Fall back to the simpler detection approach
-      const componentsFromApi = await detectComponentsWithApi(imageBase64);
-      
-      if (componentsFromApi.length > 0) {
-        console.log(`✅ Detection complete: Found ${componentsFromApi.length} components`);
-        return {
-          components: componentsFromApi,
-          image: imageBase64,
-          analysis: "Components detected successfully using fallback API"
-        };
+      // Try one more time with the alternative component detection
+      try {
+        const componentsFromRetry = await retryComponentDetection(imageBase64);
+        
+        if (componentsFromRetry.length > 0) {
+          console.log(`✅ Detection complete: Found ${componentsFromRetry.length} components with alternative approach`);
+          return {
+            components: componentsFromRetry,
+            image: imageBase64,
+            analysis: "Components detected successfully using alternative approach"
+          };
+        }
+      } catch (retryError) {
+        console.error('❌ Error in alternative component detection:', retryError);
       }
+      
+      // If all else fails, use fallback components
+      console.log('Creating fallback components for UI improvement');
+      const fallbackComponents = createFallbackComponents();
+      console.log(`Created ${fallbackComponents.length} fallback components`);
+      
+      console.log(`✅ Detection complete: Found ${fallbackComponents.length} components`);
+      return {
+        components: fallbackComponents,
+        image: imageBase64,
+        analysis: "Components generated successfully as fallbacks"
+      };
     }
-    */
     
-    // Create fallback components for UI improvement
-    console.log('Creating fallback components for UI improvement');
-    const fallbackComponents = createFallbackComponents();
-    console.log(`Created ${fallbackComponents.length} fallback components`);
-    
-    console.log(`✅ Detection complete: Found ${fallbackComponents.length} components`);
-    return {
-      components: fallbackComponents,
-      image: imageBase64,
-      analysis: "Components generated successfully as fallbacks"
-    };
   } catch (error) {
     console.error('❌ Error in component detection:', error);
     
@@ -174,7 +192,7 @@ export const detectComponentsWithOpenAI = async (imageBase64: string): Promise<D
   
   try {
     // Check API key before making the request and get the cleaned key
-    const cleanedApiKey = checkOpenAIKey();
+    const cleanedApiKey = await checkOpenAIKey();
     
     // Ensure base64 string is properly formatted
     const formattedImage = imageBase64.startsWith('data:image') 
@@ -372,7 +390,7 @@ async function retryComponentDetection(imageBase64: string): Promise<DetectedCom
   console.log('Retrying component detection with alternative approach...');
   
   try {
-    const cleanedApiKey = checkOpenAIKey();
+    const cleanedApiKey = await checkOpenAIKey();
     
     // Ensure base64 string is properly formatted
     const formattedImage = imageBase64.startsWith('data:image') 
@@ -1007,7 +1025,7 @@ export const analyzeComponents = async (
   
   try {
     // Check API key before making the request
-    const cleanedApiKey = checkOpenAIKey();
+    const cleanedApiKey = await checkOpenAIKey();
     
     // Ensure image is properly formatted
     const formattedImage = fullImageBase64.startsWith('data:image') 
@@ -2155,7 +2173,7 @@ export const getAIAnalysis = async (prompt: string): Promise<any> => {
   
   try {
     // Check API key before making the request
-    const apiKey = checkOpenAIKey();
+    const apiKey = await checkOpenAIKey();
     
     // Prepare the request payload
     const payload = {
