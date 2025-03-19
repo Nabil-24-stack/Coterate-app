@@ -40,38 +40,54 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const loadPages = async () => {
       if (user) {
         try {
-          const { data, error } = await getPages(user.id);
+          const pagesData = await getPages();
           
-          if (error) {
-            console.error('Error loading pages:', error);
-            return;
+          if (pagesData && pagesData.length > 0) {
+            // Filter pages to only show those belonging to the current user
+            const userPages = pagesData.filter(page => page.user_id === user.id);
+            
+            if (userPages.length > 0) {
+              setPages(userPages);
+              setCurrentPage(userPages[0]);
+              return;
+            }
           }
           
-          if (data && data.length > 0) {
-            setPages(data);
-            setCurrentPage(data[0]);
+          // Create a default page if none exist for this user
+          const defaultPage: Omit<Page, 'id' | 'created_at' | 'updated_at'> = {
+            name: 'Default Page',
+            baseImage: 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design',
+            user_id: user.id
+          };
+          
+          const newPage = await createPage(defaultPage);
+          
+          if (newPage) {
+            setPages([newPage]);
+            setCurrentPage(newPage);
           } else {
-            // Create a default page if none exist
-            const defaultPage: Omit<Page, 'id'> = {
-              name: 'Default Page',
+            console.error('Failed to create default page');
+            // Fallback to local page if database operations fail
+            const localDefaultPage: Page = {
+              id: generateUUID(),
+              name: 'Default Page (Local)',
               baseImage: 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design',
               user_id: user.id
             };
-            
-            const { data: newPage, error: createError } = await createPage(defaultPage);
-            
-            if (createError) {
-              console.error('Error creating default page:', createError);
-              return;
-            }
-            
-            if (newPage) {
-              setPages(newPage);
-              setCurrentPage(newPage[0]);
-            }
+            setPages([localDefaultPage]);
+            setCurrentPage(localDefaultPage);
           }
         } catch (error) {
           console.error('Error in loadPages:', error);
+          // Fallback to local page if database operations fail
+          const localDefaultPage: Page = {
+            id: generateUUID(),
+            name: 'Default Page (Local)',
+            baseImage: 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design',
+            user_id: user.id
+          };
+          setPages([localDefaultPage]);
+          setCurrentPage(localDefaultPage);
         }
       } else {
         // If no user, use a local default page
@@ -92,103 +108,156 @@ export const PageProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Add a new page
   const addPage = async (name: string) => {
     console.log('addPage called with name:', name);
-    console.log('Current user:', user);
     
     try {
       if (user) {
         console.log('Creating page for authenticated user');
-        const newPageData: Omit<Page, 'id'> = {
+        const newPageData: Omit<Page, 'id' | 'created_at' | 'updated_at'> = {
           name: name || `Page ${pages.length + 1}`,
-          baseImage: 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design',
-          user_id: user.id
+          user_id: user.id,
+          baseImage: 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design'
         };
         
-        console.log('New page data:', newPageData);
-        const { data, error } = await createPage(newPageData);
-        console.log('Create page response:', { data, error });
+        const newPage = await createPage(newPageData);
         
-        if (error) {
-          console.error('Error creating page:', error);
-          return;
-        }
-        
-        if (data && data[0]) {
-          console.log('Setting pages with new page:', [...pages, data[0]]);
-          setPages([...pages, data[0]]);
-          setCurrentPage(data[0]);
+        if (newPage) {
+          setPages(prevPages => [...prevPages, newPage]);
+          setCurrentPage(newPage);
         } else {
-          console.error('No data returned from createPage');
+          console.error('Failed to create page in database');
+          // Fallback to local page
+          const localPage: Page = {
+            id: generateUUID(),
+            name: name || `Page ${pages.length + 1}`,
+            baseImage: 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design',
+            user_id: user.id
+          };
+          
+          setPages(prevPages => [...prevPages, localPage]);
+          setCurrentPage(localPage);
         }
       } else {
-        console.log('Creating local page (no authenticated user)');
-        // If no user, create a local page
+        // Create a local page if no user
         const newPage: Page = {
           id: generateUUID(),
           name: name || `Page ${pages.length + 1}`,
           baseImage: 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design'
         };
         
-        console.log('New local page:', newPage);
-        setPages([...pages, newPage]);
+        setPages(prevPages => [...prevPages, newPage]);
         setCurrentPage(newPage);
       }
     } catch (error) {
       console.error('Error in addPage:', error);
+      // Fallback to local page
+      const localPage: Page = {
+        id: generateUUID(),
+        name: name || `Page ${pages.length + 1}`,
+        baseImage: 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design',
+        user_id: user?.id
+      };
+      
+      setPages(prevPages => [...prevPages, localPage]);
+      setCurrentPage(localPage);
     }
   };
   
   // Update a page
   const updatePage = async (id: string, updates: Partial<Page>) => {
+    console.log('updatePage called with id:', id, 'updates:', updates);
+    
     try {
       if (user) {
-        const { data, error } = await updatePageInDb(id, updates);
+        // Update in database
+        const updatedPage = await updatePageInDb(id, updates);
         
-        if (error) {
-          console.error('Error updating page:', error);
-          return;
-        }
+        // Update local state regardless of database result
+        setPages(prevPages => 
+          prevPages.map(page => 
+            page.id === id ? { ...page, ...updates } : page
+          )
+        );
         
-        if (data) {
-          setPages(pages.map(page => page.id === id ? { ...page, ...updates } : page));
-          
-          if (currentPage && currentPage.id === id) {
-            setCurrentPage({ ...currentPage, ...updates });
-          }
+        // Update current page if it's the one being updated
+        if (currentPage && currentPage.id === id) {
+          setCurrentPage(prevPage => ({
+            ...prevPage!,
+            ...updates
+          }));
         }
       } else {
-        // If no user, update local page
-        setPages(pages.map(page => page.id === id ? { ...page, ...updates } : page));
+        // Update local state only
+        setPages(prevPages => 
+          prevPages.map(page => 
+            page.id === id ? { ...page, ...updates } : page
+          )
+        );
         
+        // Update current page if it's the one being updated
         if (currentPage && currentPage.id === id) {
-          setCurrentPage({ ...currentPage, ...updates });
+          setCurrentPage(prevPage => ({
+            ...prevPage!,
+            ...updates
+          }));
         }
       }
     } catch (error) {
       console.error('Error in updatePage:', error);
+      // Still update local state to avoid UI issues
+      setPages(prevPages => 
+        prevPages.map(page => 
+          page.id === id ? { ...page, ...updates } : page
+        )
+      );
+      
+      if (currentPage && currentPage.id === id) {
+        setCurrentPage(prevPage => ({
+          ...prevPage!,
+          ...updates
+        }));
+      }
     }
   };
   
   // Delete a page
   const deletePage = async (id: string) => {
+    console.log('deletePage called with id:', id);
+    
     try {
       if (user) {
-        const { error } = await deletePageInDb(id);
+        // Delete from database
+        const success = await deletePageInDb(id);
         
-        if (error) {
-          console.error('Error deleting page:', error);
-          return;
+        if (!success) {
+          console.warn('Database delete operation failed, but proceeding with UI update');
         }
       }
       
-      // Update local state regardless of user status
-      const updatedPages = pages.filter(page => page.id !== id);
-      setPages(updatedPages);
+      // Remove from local state regardless of database result
+      const newPages = pages.filter(page => page.id !== id);
+      setPages(newPages);
       
+      // If the deleted page was the current page, set a new current page
       if (currentPage && currentPage.id === id) {
-        setCurrentPage(updatedPages.length > 0 ? updatedPages[0] : null);
+        if (newPages.length > 0) {
+          setCurrentPage(newPages[0]);
+        } else {
+          setCurrentPage(null);
+        }
       }
     } catch (error) {
       console.error('Error in deletePage:', error);
+      // Still update local state to avoid UI issues
+      const newPages = pages.filter(page => page.id !== id);
+      setPages(newPages);
+      
+      if (currentPage && currentPage.id === id) {
+        if (newPages.length > 0) {
+          setCurrentPage(newPages[0]);
+        } else {
+          setCurrentPage(null);
+        }
+      }
     }
   };
   

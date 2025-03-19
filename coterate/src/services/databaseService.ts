@@ -35,21 +35,9 @@ const camelToSnake = (obj: any): any => {
 // Function to call our serverless API
 const callSupabaseApi = async (operation: string, table: string, data?: any, id?: string, userId?: string) => {
   try {
-    // First try to use the serverless function
-    const response = await axios.post('/api/supabase', {
-      operation,
-      table,
-      data,
-      id,
-      userId
-    });
-    
-    return response.data;
-  } catch (error) {
-    console.error(`Error calling Supabase API (${operation}):`, error);
-    
-    // Fall back to direct Supabase calls if the serverless function fails
-    console.log('Falling back to direct Supabase call');
+    // Use direct Supabase client calls instead of relying on serverless function
+    // This avoids the 405 Method Not Allowed errors when the API route isn't properly configured
+    console.log(`Using direct Supabase client for operation: ${operation} on table: ${table}`);
     
     switch (operation) {
       case 'getItems':
@@ -122,102 +110,63 @@ const callSupabaseApi = async (operation: string, table: string, data?: any, id?
         return { success: true };
         
       default:
-        throw new Error('Invalid operation');
+        throw new Error(`Invalid operation: ${operation}`);
     }
+    
+  } catch (error) {
+    console.error(`Error in Supabase operation (${operation}):`, error);
+    throw error;
   }
 };
 
 // Pages
-export const getPages = async (userId: string) => {
-  console.log('Getting pages for user:', userId);
-  
+export const getPages = async (): Promise<Page[]> => {
   try {
-    const result = await callSupabaseApi('getItems', 'pages', undefined, undefined, userId);
-    console.log('getPages response:', result);
-    return { data: result.data, error: null };
-  } catch (error) {
-    console.error('Error in getPages:', error);
-    return { data: null, error };
+    const { data } = await callSupabaseApi('getItems', 'pages');
+    return data || [];
+  } catch (err) {
+    console.error('Error getting pages:', err);
+    return [];
   }
 };
 
-export const getPage = async (id: string) => {
+export const getPage = async (id: string): Promise<Page | null> => {
   try {
-    const result = await callSupabaseApi('getItem', 'pages', undefined, id);
-    return { data: result.data, error: null };
-  } catch (error) {
-    console.error('Error in getPage:', error);
-    return { data: null, error };
+    const { data } = await callSupabaseApi('getItem', 'pages', null, id);
+    return data || null;
+  } catch (err) {
+    console.error('Error getting page:', err);
+    return null;
   }
 };
 
-export const createPage = async (page: Omit<Page, 'id'>) => {
-  console.log('createPage called with:', page);
-  
+export const createPage = async (page: Omit<Page, 'id' | 'created_at' | 'updated_at'>): Promise<Page | null> => {
   try {
-    const result = await callSupabaseApi('createItem', 'pages', page);
-    console.log('createPage response:', result);
-    return { data: result.data, error: null };
-  } catch (error) {
-    console.error('Error in createPage:', error);
-    return { data: null, error };
+    const { data } = await callSupabaseApi('createItem', 'pages', page);
+    return data ? data[0] : null;
+  } catch (err) {
+    console.error('Error creating page:', err);
+    return null;
   }
 };
 
-export const updatePage = async (id: string, updates: Partial<Page>) => {
-  console.log('Updating page:', id, updates);
-  
+export const updatePage = async (id: string, updates: Partial<Page>): Promise<Page | null> => {
   try {
-    // First try API call with error handling
-    try {
-      const result = await callSupabaseApi('updateItem', 'pages', updates, id);
-      console.log('updatePage response:', result);
-      return { data: result.data, error: null };
-    } catch (apiError) {
-      console.warn('API update failed, using direct Supabase call:', apiError);
-      
-      // Convert camelCase to snake_case for the Supabase database
-      const snakeCaseUpdates = camelToSnake(updates);
-      
-      // Try direct Supabase update
-      const { data: updatedData, error: updateError } = await supabase
-        .from('pages')
-        .update(snakeCaseUpdates)
-        .eq('id', id)
-        .select();
-      
-      if (updateError) {
-        // If there's still an error, just return a mock success response
-        // This prevents UI from breaking due to backend errors
-        console.warn('Direct Supabase update failed, returning mock success:', updateError);
-        return { 
-          data: [{ ...updates, id }], 
-          error: null 
-        };
-      }
-      
-      // Return successful data if direct call worked
-      return { data: snakeToCamel(updatedData), error: null };
-    }
-  } catch (error) {
-    console.error('Error in updatePage:', error);
-    
-    // Return a mock success to prevent UI errors
-    console.warn('Returning mock success to prevent UI errors');
-    return { 
-      data: [{ ...updates, id }], 
-      error: null 
-    };
+    const { data } = await callSupabaseApi('updateItem', 'pages', updates, id);
+    return data ? data[0] : null;
+  } catch (err) {
+    console.error('Error updating page:', err);
+    return null;
   }
 };
 
-export const deletePage = async (id: string) => {
+export const deletePage = async (id: string): Promise<boolean> => {
   try {
-    await callSupabaseApi('deleteItem', 'pages', undefined, id);
-    return { error: null };
-  } catch (error) {
-    console.error('Error in deletePage:', error);
-    return { error };
+    await callSupabaseApi('deleteItem', 'pages', null, id);
+    return true;
+  } catch (err) {
+    console.error('Error deleting page:', err);
+    return false;
   }
 };
 
