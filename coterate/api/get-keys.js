@@ -20,18 +20,21 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Get OpenAI API key from environment variables
-    // In Vercel, this will be the key you've set in the project settings
-    const openaiKey = process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY;
+    // Direct access to environment variables
+    const openaiKey = process.env.OPENAI_API_KEY;
     
-    // Log available environment variables for debugging (exclude sensitive ones)
+    console.log('API Key Request - Checking environment variables');
+    console.log('OPENAI_API_KEY exists:', !!process.env.OPENAI_API_KEY);
+    console.log('REACT_APP_OPENAI_API_KEY exists:', !!process.env.REACT_APP_OPENAI_API_KEY);
+    
+    // Log all available env vars for debugging (excluding sensitive data)
     const availableEnvKeys = Object.keys(process.env)
       .filter(key => !key.includes('NODE_') && 
                !key.includes('npm_') && 
                !key.includes('PATH') && 
                !key.includes('HOME'));
     
-    console.log('API Key Request - Available environment variables:', availableEnvKeys);
+    console.log('Available env keys:', availableEnvKeys);
     
     if (!openaiKey) {
       console.warn('OpenAI API key not found in environment variables');
@@ -52,6 +55,10 @@ module.exports = async (req, res) => {
       .replace(/["']/g, '') // Remove quotes
       .replace(/\s+/g, '')  // Remove whitespace including line breaks
       .trim();              // Trim any remaining whitespace
+    
+    console.log('OpenAI key format check:');
+    console.log('- Length:', cleanedOpenaiKey.length);
+    console.log('- Starts with sk-:', cleanedOpenaiKey.startsWith('sk-'));
     
     // Return the API key
     const responseObj = {
