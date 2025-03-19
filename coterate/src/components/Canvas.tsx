@@ -9,6 +9,38 @@ import { FigmaExport } from './FigmaExport';
 import { DesignIteration, DetectedComponent } from '../types';
 import axios from 'axios';
 
+// Add error handling helper function
+const handleApiError = (error: any, context: string): string => {
+  let errorMessage = `Error in ${context}: `;
+  
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const statusText = error.response?.statusText;
+    
+    if (status === 405) {
+      errorMessage += `API endpoint method not allowed (405). The API endpoint is not configured correctly or is not accessible.`;
+      console.error(`${context} - Method Not Allowed: The server endpoint doesn't support this operation`, error);
+    } else if (status === 404) {
+      errorMessage += `API endpoint not found (404). Check if the API route exists.`;
+      console.error(`${context} - Not Found: API endpoint does not exist`, error);
+    } else if (status === 401 || status === 403) {
+      errorMessage += `Authentication error (${status}). Check your API keys and permissions.`;
+      console.error(`${context} - Authentication Error: Invalid or missing credentials`, error);
+    } else if (error.message.includes('Network Error')) {
+      errorMessage += 'Network connection issue. Check your internet connection.';
+      console.error(`${context} - Network Error: Could not connect to API`, error);
+    } else {
+      errorMessage += error.message || 'Unknown error occurred';
+      console.error(`${context} - Error:`, error);
+    }
+  } else {
+    errorMessage += error?.message || 'Unknown error occurred';
+    console.error(`${context} - Error:`, error);
+  }
+  
+  return errorMessage;
+};
+
 // Global style to remove focus outlines and borders
 const GlobalStyle = createGlobalStyle`
   * {
@@ -1283,6 +1315,12 @@ export const Canvas = () => {
             customPrompt: JSON.stringify(componentResult.analysis)
           });
           
+          // Check if response data contains the expected fields
+          if (!response.data || !response.data.image) {
+            console.warn('API response missing required data:', response);
+            throw new Error('API response is missing required image data');
+          }
+          
           // Create a new iteration with the improved design
           const newIteration: DesignIteration = {
             id: `improved-${currentPage.id}-${Date.now()}`,
@@ -1290,14 +1328,15 @@ export const Canvas = () => {
             label: `Improved ${selectedIteration.iterationNumber + 1}`,
             iterationType: 'improved',
             iterationNumber: selectedIteration.iterationNumber + 1,
-            analysis: response.data.analysis,
-            components: componentResult.analysis.improvements.map(imp => ({
-              id: `comp-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-              type: imp.componentType,
-              confidence: 0.95,
-              boundingBox: { x: 0, y: 0, width: 0, height: 0 },
-              attributes: imp.improvements
-            })),
+            analysis: response.data.analysis || 'No analysis available',
+            components: componentResult.analysis && componentResult.analysis.improvements ? 
+              componentResult.analysis.improvements.map(imp => ({
+                id: `comp-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+                type: imp.componentType || 'unknown',
+                confidence: 0.95,
+                boundingBox: { x: 0, y: 0, width: 0, height: 0 },
+                attributes: imp.improvements || {}
+              })) : [],
             position: { 
               x: (selectedIteration.position?.x || 0) + 50, 
               y: (selectedIteration.position?.y || 0) + 50 
@@ -1306,7 +1345,13 @@ export const Canvas = () => {
           
           // Update the page with the improved image
           if (selectedIteration.iterationType === 'base') {
-            updatePage(currentPage.id, { iteratedImage: response.data.image });
+            try {
+              await updatePage(currentPage.id, { iteratedImage: response.data.image });
+              console.log('Successfully updated page with improved image');
+            } catch (updateError) {
+              console.warn('Failed to update page with improved image:', updateError);
+              // Continue with the iteration process even if page update fails
+            }
           }
           
           // Add the new iteration to the map
@@ -1321,11 +1366,13 @@ export const Canvas = () => {
           console.log('Successfully generated improved UI design with AI services');
           return;
         } catch (apiError) {
-          console.warn('API-based UI improvement failed, falling back to canvas-based approach:', apiError);
+          const errorMsg = handleApiError(apiError, 'API-based UI improvement');
+          console.warn(errorMsg);
           // Continue to fallback
         }
       } catch (componentError) {
-        console.warn('Component-based UI improvement failed:', componentError);
+        const errorMsg = handleApiError(componentError, 'Component-based UI improvement');
+        console.warn(errorMsg);
         // Continue to fallback
       }
       
@@ -1462,7 +1509,13 @@ This iteration uses a local canvas-based enhancement approach as a fallback when
       
       // Update the page with the improved image
       if (selectedIteration.iterationType === 'base') {
-        updatePage(currentPage.id, { iteratedImage: improvedImageDataUrl });
+        try {
+          await updatePage(currentPage.id, { iteratedImage: improvedImageDataUrl });
+          console.log('Successfully updated page with improved image');
+        } catch (updateError) {
+          console.warn('Failed to update page with improved image:', updateError);
+          // Continue with the iteration process even if page update fails
+        }
       }
       
       // Add the new iteration to the map
@@ -1478,7 +1531,8 @@ This iteration uses a local canvas-based enhancement approach as a fallback when
       
     } catch (error) {
       console.error('Error during iteration:', error);
-      setError(error instanceof Error ? error.message : 'An unknown error occurred');
+      const errorMsg = handleApiError(error, 'UI improvement process');
+      setError(errorMsg);
     } finally {
       setIsLoading(false);
     }
