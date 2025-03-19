@@ -21,6 +21,7 @@ module.exports = async (req, res) => {
 
   try {
     // Get OpenAI API key from environment variables
+    // In Vercel, this will be the key you've set in the project settings
     const openaiKey = process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY;
     
     // Log available environment variables for debugging (exclude sensitive ones)
@@ -52,13 +53,13 @@ module.exports = async (req, res) => {
       .replace(/\s+/g, '')  // Remove whitespace including line breaks
       .trim();              // Trim any remaining whitespace
     
-    // Return the API keys
+    // Return the API key
     const responseObj = {
       openaiKey: cleanedOpenaiKey,
-      message: 'API keys retrieved successfully'
+      message: 'API key retrieved successfully from Vercel environment variables'
     };
     
-    console.log('Sending successful response with key');
+    console.log('Sending successful response with API key');
     return res.status(200).json(responseObj);
   } catch (error) {
     console.error('Error retrieving API keys:', error);

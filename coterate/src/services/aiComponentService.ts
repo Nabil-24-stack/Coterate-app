@@ -80,11 +80,12 @@ const checkOpenAIKey = async () => {
   try {
     console.log('Checking for OpenAI API key...');
     
-    // Try to get the key from environment variables
+    // First try to get the key from environment variables (server-side or build-time)
     const envKey = process.env.REACT_APP_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
     
     if (envKey && envKey.toString().length > 20) {
       console.log('Found OpenAI API key in environment variables');
+      
       // Clean up the API key by removing any quotes, spaces, or line breaks
       const cleanedKey = envKey.toString()
         .replace(/["']/g, '') // Remove quotes
@@ -96,42 +97,42 @@ const checkOpenAIKey = async () => {
       }
     }
     
-    // For Vercel deployments, try to use a hardcoded key as a last resort
+    // If deployed on Vercel, try to fetch the key from the server environment
     if (window.location.hostname.includes('vercel.app') || 
         window.location.hostname.includes('coterate-app')) {
-      console.log('Using special handling for production environment');
       
-      // Instead of hardcoding a key, we'll prompt the user to add their own key
-      // This is a more secure approach that doesn't expose API keys in the codebase
-      const userKey = localStorage.getItem('openai_api_key');
-      
-      if (userKey && userKey.length > 20) {
-        console.log('Using locally stored API key from user');
-        return userKey;
+      try {
+        // Try to get the key from server environment through an API call
+        console.log('Fetching OpenAI API key from server environment');
+        const response = await fetch('/api/get-keys');
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.openaiKey) {
+            console.log('Successfully retrieved OpenAI API key from server');
+            return data.openaiKey;
+          }
+        }
+        
+        // If API call fails, fall back to direct environment access
+        // This uses the key set in Vercel environment variables
+        console.log('Using Vercel environment variables directly');
+        return process.env.OPENAI_API_KEY || '';
+        
+      } catch (fetchError) {
+        console.warn('Error fetching key from server, using direct environment variable');
+        // This uses the key set in Vercel environment variables
+        return process.env.OPENAI_API_KEY || '';
       }
-      
-      // Prompt the user to enter their key directly (in a real app, this would be a UI dialog)
-      const message = 'OpenAI API key not found. Please add your key in the settings or contact support.';
-      console.error(message);
-      
-      // Throw a specific error that can be caught and handled by the UI
-      throw new Error('OPENAI_KEY_MISSING');
     }
     
-    console.warn('No valid OpenAI API key found. Please add a key to your environment variables.');
-    throw new Error('OpenAI API key not found');
+    // For local development without key, throw error
+    console.warn('No valid OpenAI API key found');
+    throw new Error('OpenAI API key not found in environment variables');
     
   } catch (error) {
     console.error('Error retrieving OpenAI API key:', error);
-    
-    // In case of error in a production environment, provide a more specific error
-    if (window.location.hostname.includes('vercel.app') || 
-        window.location.hostname.includes('coterate-app')) {
-      throw new Error('OpenAI API key not properly configured in Vercel environment. Please contact support.');
-    }
-    
-    // For local development, provide guidance on adding an API key
-    throw new Error('Please add your OpenAI API key as REACT_APP_OPENAI_API_KEY in your .env.local file');
+    throw new Error('OpenAI API key not configured correctly. Please check your environment variables.');
   }
 };
 
