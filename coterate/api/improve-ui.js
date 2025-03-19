@@ -49,8 +49,20 @@ module.exports = async (req, res) => {
       
       if (!openaiKey) {
         console.warn('OpenAI API key is missing, skipping analysis step');
+        console.log('Available environment variables:', Object.keys(process.env).filter(key => 
+          !key.includes('NODE_') && 
+          !key.includes('npm_') && 
+          !key.includes('PATH') &&
+          !key.includes('HOME')
+        ));
         analysis = "UI design analysis skipped due to missing API key.";
       } else {
+        // Clean up the API key by removing any quotes or extra whitespace
+        const cleanedApiKey = openaiKey.toString()
+          .replace(/["']/g, '') // Remove quotes
+          .replace(/\s+/g, '')  // Remove whitespace
+          .trim();
+        
         // Prepare the base prompt for UI analysis
         let prompt = `Analyze this UI design and provide specific, actionable improvements. 
 Focus on:
@@ -96,7 +108,7 @@ Format your response as a structured analysis with clear sections.`;
           {
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${openaiKey}`
+              'Authorization': `Bearer ${cleanedApiKey}`
             }
           }
         );

@@ -77,18 +77,22 @@ interface ComponentsData {
 
 // Add a helper function to check if the API key is valid
 const checkOpenAIKey = () => {
-  if (!OPENAI_API_KEY || !OPENAI_API_KEY.toString().startsWith('sk-')) {
-    throw new Error('OpenAI API key is missing or invalid. Please add a valid REACT_APP_OPENAI_API_KEY to your .env.local file.');
+  // Try to get the API key from various environment variables - both React app and serverless
+  // The Vercel deployment will generally use OPENAI_API_KEY rather than REACT_APP_ prefix
+  const apiKey = process.env.REACT_APP_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+  
+  if (!apiKey) {
+    throw new Error('OpenAI API key is missing or invalid. Please add a valid OPENAI_API_KEY to your environment variables.');
   }
   
   // Clean up the API key by removing any quotes, spaces, or line breaks
-  const cleanedApiKey = OPENAI_API_KEY.toString()
+  const cleanedApiKey = apiKey.toString()
     .replace(/["']/g, '') // Remove quotes
     .replace(/\s+/g, '')  // Remove whitespace including line breaks
     .trim();              // Trim any remaining whitespace
   
   if (cleanedApiKey === 'your-openai-api-key-here' || cleanedApiKey === 'your_openai_api_key_here') {
-    throw new Error('Please replace the placeholder API key with your actual OpenAI API key in the .env.local file.');
+    throw new Error('Please replace the placeholder API key with your actual OpenAI API key in the environment variables.');
   }
   
   // Return the cleaned key for use
