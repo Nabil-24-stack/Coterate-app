@@ -693,99 +693,213 @@ export const Canvas = () => {
   // Effect to handle page changes
   useEffect(() => {
     if (currentPage) {
-      // Reset selected iteration when switching pages
-      setSelectedIteration(null);
+      // Preserve the current iterations for this page when switching pages
+      // Don't reset selectedIteration if we're on the same page and iterations exist
+      const pageIterations = iterationsMap[currentPage.id] || [];
+      if (pageIterations.length > 0) {
+        // Only reset selected iteration if we don't have one already for this page
+        if (!selectedIteration || (selectedIteration && !pageIterations.some(it => it.id === selectedIteration.id))) {
+          setSelectedIteration(pageIterations[0]);
+        }
+      } else {
+        setSelectedIteration(null);
+      }
       
       // Close any open panels
       setShowAnalysis(false);
       setShowFigmaExport(false);
       
-      // If the page has a base image but no iterations, create a base iteration
-      if (currentPage.baseImage && 
-          currentPage.baseImage !== 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design' && 
-          (!iterationsMap[currentPage.id] || iterationsMap[currentPage.id].length === 0)) {
+      // Reset error state
+      setError(null);
+      
+      // Get saved canvas position for this page
+      const savedPosition = pageCanvasPositions[currentPage.id];
+      
+      // Check if we need to initialize iterations for this page
+      // This ensures we keep and display the baseImage properly
+      if (!pageIterations.length && 
+          currentPage.baseImage && 
+          currentPage.baseImage !== 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design') {
         
+        // Create base iteration from the page's baseImage
         const baseIteration: DesignIteration = {
           id: `base-${currentPage.id}-${Date.now()}`,
           image: currentPage.baseImage,
           label: 'Base Design',
           iterationType: 'base',
           iterationNumber: 0,
-          position: { x: 0, y: 0 } // Initialize position
+          position: { x: 0, y: 0 }
         };
-                
+        
+        // Set the iterations for this page
+        setIterationsMap(prev => ({
+          ...prev,
+          [currentPage.id]: [baseIteration]
+        }));
+        
+        // Select the base iteration
+        setSelectedIteration(baseIteration);
+      }
+      
+      if (savedPosition) {
+        // Restore saved position and scale
+        setCanvasPosition(savedPosition);
+        setCanvasScale(savedPosition.scale);
+        
+        // Mark that we've centered for this page
+        centeringRef.current = {
+          pageId: currentPage.id,
+          hasCentered: true,
+          animationFrameId: null
+        };
+      } else {
+        // Reset the centering state for the current page
+        centeringRef.current = {
+          pageId: currentPage.id,
+          hasCentered: false,
+          animationFrameId: null
+        };
+        
+        // Center the canvas
+        requestAnimationFrame(() => {
+          if (centeringRef.current.pageId === currentPage.id && !centeringRef.current.hasCentered) {
+            resetCanvas();
+          }
+        });
+      }
+      
+      // Set up initial iterations state if needed
+      if (currentPage.baseImage && 
+          currentPage.baseImage !== 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design' && 
+          !iterationsMap[currentPage.id]) {
+        
+        console.log('Setting up initial iterations for page:', currentPage.id);
+        
+        // Create base iteration
+        const baseIteration: DesignIteration = {
+          id: `base-${currentPage.id}-${Date.now()}`,
+          image: currentPage.baseImage,
+          label: 'Base Design',
+          iterationType: 'base',
+          iterationNumber: 0,
+          position: { x: 0, y: 0 }
+        };
+        
         setIterationsMap(prev => ({
           ...prev,
           [currentPage.id]: [baseIteration]
         }));
         
         setSelectedIteration(baseIteration);
-      } else if (iterationsMap[currentPage.id] && iterationsMap[currentPage.id].length > 0) {
-        // If the page has iterations, select the first one
-        setSelectedIteration(iterationsMap[currentPage.id][0]);
       }
-      
-      // Cancel any existing animation frame
-      if (centeringRef.current.animationFrameId !== null) {
-        cancelAnimationFrame(centeringRef.current.animationFrameId);
-      }
-      
-      // Reset the centering state for the new page
-      centeringRef.current = {
-        pageId: currentPage.id,
-        hasCentered: false,
-        animationFrameId: null
-      };
-      
-      // Use requestAnimationFrame for more reliable centering
-      const frameId = requestAnimationFrame(() => {
-        // Use another requestAnimationFrame to ensure we're in the next render cycle
-        centeringRef.current.animationFrameId = requestAnimationFrame(() => {
-          // Only center if we haven't already centered for this page
-          if (centeringRef.current.pageId === currentPage.id && !centeringRef.current.hasCentered) {
-            resetCanvas();
-            
-            // Schedule another centering after a delay to ensure it sticks
-            setTimeout(() => {
-              if (centeringRef.current.pageId === currentPage.id) {
-                resetCanvas();
-              }
-            }, 500);
-          }
-        });
-      });
-      
-      // Store the frame ID so we can cancel it if needed
-      centeringRef.current.animationFrameId = frameId;
-      
-      // Clean up function to cancel animation frames
-      return () => {
-        if (centeringRef.current.animationFrameId !== null) {
-          cancelAnimationFrame(centeringRef.current.animationFrameId);
-        }
-      };
     }
-  }, [currentPage?.id, iterationsMap]);
+  }, [currentPage, pageCanvasPositions, iterationsMap, resetCanvas]);
 
   // Add an effect to center the canvas when the component mounts
   useEffect(() => {
     resetCanvas();
   }, []);
 
-  // Handle canvas mouse down for dragging
-  const handleCanvasMouseDown = (e: MouseEvent) => {
-    if (e.button !== 0 || draggingDesign) return; // Only left mouse button and not dragging a design
+  // Add a defensive mechanism to recover iterations if they get lost
+  useEffect(() => {
+    // This is a defensive mechanism to ensure we always have iterations for pages with a baseImage
+    const checkAndRestoreIterations = () => {
+      if (currentPage && 
+          currentPage.baseImage && 
+          currentPage.baseImage !== 'https://via.placeholder.com/800x600?text=Paste+Your+UI+Design') {
+        
+        // Check if we have iterations for this page
+        const pageIterations = iterationsMap[currentPage.id] || [];
+        
+        // If we don't have iterations but have a baseImage, restore them
+        if (pageIterations.length === 0) {
+          console.log('Defensive recovery: Restoring iterations for page with baseImage:', currentPage.id);
+          
+          // Create base iteration from the page's baseImage
+          const baseIteration: DesignIteration = {
+            id: `base-${currentPage.id}-${Date.now()}`,
+            image: currentPage.baseImage,
+            label: 'Base Design',
+            iterationType: 'base',
+            iterationNumber: 0,
+            position: { x: 0, y: 0 }
+          };
+          
+          // Set the iterations for this page
+          setIterationsMap(prev => ({
+            ...prev,
+            [currentPage.id]: [baseIteration]
+          }));
+          
+          // Select the base iteration
+          setSelectedIteration(baseIteration);
+          
+          // Force re-render
+          setForceRender(prev => prev + 1);
+        }
+      }
+    };
     
-    // Deselect any selected design when clicking on the canvas
-    if (selectedIteration) {
-      setSelectedIteration(null);
+    // Check immediately when currentPage changes
+    checkAndRestoreIterations();
+    
+    // Also set up a periodic check (every 2 seconds) to ensure iterations are never lost
+    const intervalId = setInterval(checkAndRestoreIterations, 2000);
+    
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [currentPage, iterationsMap]);
+  
+  // Track iterations changes for debugging
+  useEffect(() => {
+    if (currentPage) {
+      const pageIterations = iterationsMap[currentPage.id] || [];
+      console.log(`Iterations for page ${currentPage.id}: ${pageIterations.length}`);
     }
+  }, [currentPage, iterationsMap]);
+
+  // Handle mouse down on canvas
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    // Only handle primary mouse button (left click)
+    if (e.button !== 0) return;
     
-    setIsDragging(true);
-    setDragStart({
-      x: e.clientX - canvasPosition.x,
-      y: e.clientY - canvasPosition.y
-    });
+    // If we're clicking directly on the canvas (not on a design)
+    if (e.currentTarget === e.target || 
+        (e.target as HTMLElement).classList.contains('infinite-canvas') ||
+        (e.target as HTMLElement).classList.contains('canvas-content')) {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+      
+      // Change cursor to grabbing
+      if (canvasRef.current) {
+        canvasRef.current.style.cursor = 'grabbing';
+      }
+    }
+  };
+  
+  // Handle mouse up on canvas
+  const handleCanvasMouseUp = () => {
+    if (isDragging) {
+      setIsDragging(false);
+      
+      // Reset cursor
+      if (canvasRef.current) {
+        canvasRef.current.style.cursor = 'grab';
+      }
+      
+      // If we have a current page, save the canvas position for this page
+      if (currentPage) {
+        setPageCanvasPositions(prev => ({
+          ...prev,
+          [currentPage.id]: { 
+            x: canvasPosition.x, 
+            y: canvasPosition.y, 
+            scale: canvasScale 
+          }
+        }));
+      }
+    }
   };
 
   // Handle canvas mouse move for dragging
@@ -815,16 +929,6 @@ export const Canvas = () => {
       if (centeringRef.current.pageId === currentPage.id) {
         centeringRef.current.hasCentered = true;
       }
-    }
-  };
-
-  // Handle canvas mouse up to stop dragging
-  const handleCanvasMouseUp = () => {
-    setIsDragging(false);
-    
-    // Also stop design dragging if active
-    if (draggingDesign) {
-      handleDesignMouseUp();
     }
   };
 
@@ -991,7 +1095,7 @@ export const Canvas = () => {
               const imageDataUrl = e.target?.result as string;
               if (imageDataUrl) {
                 // Get current iterations for this page
-                const currentIterations = iterationsMap[currentPage.id] || [];
+                const currentIterations = [...(iterationsMap[currentPage.id] || [])];
                 
                 // If this is the first design being pasted (empty canvas)
                 if (currentIterations.length === 0 || 
@@ -1010,12 +1114,17 @@ export const Canvas = () => {
                   };
                   
                   // Set iterations for this page to just the base iteration
-                  setIterationsMap(prev => ({
-                    ...prev,
-                    [currentPage.id]: [baseIteration]
-                  }));
+                  // Use a callback to ensure we have the latest state
+                  setIterationsMap(prev => {
+                    const newMap = { ...prev };
+                    newMap[currentPage.id] = [baseIteration];
+                    return newMap;
+                  });
                   
+                  // Select the base iteration
                   setSelectedIteration(baseIteration);
+                  
+                  console.log('Created base iteration for pasted image:', baseIteration.id);
                 } else {
                   // Calculate a position offset for the new design
                   // This will place new designs in a cascading pattern
@@ -1032,29 +1141,25 @@ export const Canvas = () => {
                     position: { x: offsetX, y: offsetY } // Initialize with offset
                   };
                   
-                  // Add the new iteration to the existing ones
-                  setIterationsMap(prev => ({
-                    ...prev,
-                    [currentPage.id]: [...(prev[currentPage.id] || []), newIteration]
-                  }));
+                  // Add the new iteration to the existing ones while preserving the existing ones
+                  setIterationsMap(prev => {
+                    const currentPageIterations = [...(prev[currentPage.id] || [])];
+                    return {
+                      ...prev,
+                      [currentPage.id]: [...currentPageIterations, newIteration]
+                    };
+                  });
                   
                   // Select the newly added iteration
                   setSelectedIteration(newIteration);
+                  
+                  console.log('Added additional iteration for pasted image:', newIteration.id);
                 }
                 
                 // Reset canvas position and scale
                 // Use requestAnimationFrame to ensure the DOM has updated
                 requestAnimationFrame(() => {
-                  // Reset the centering state for the current page
-                  if (currentPage) {
-                    centeringRef.current = {
-                      pageId: currentPage.id,
-                      hasCentered: false,
-                      animationFrameId: null
-                    };
-                  }
-                  
-                  // Reset the canvas to center the design
+                  // Reset canvas to center the design without changing iterations
                   resetCanvas();
                 });
                 
@@ -1063,15 +1168,8 @@ export const Canvas = () => {
                   document.activeElement.blur();
                 }
                 
-                // Add a small delay and then apply a CSS fix to remove any borders
-                setTimeout(() => {
-                  const images = document.querySelectorAll('img');
-                  images.forEach(img => {
-                    img.style.border = 'none';
-                    img.style.outline = 'none';
-                    img.style.boxShadow = 'none';
-                  });
-                }, 100);
+                // Force a re-render to make sure the image is visible
+                setForceRender(prev => prev + 1);
               }
             };
             reader.readAsDataURL(blob);
@@ -1084,7 +1182,7 @@ export const Canvas = () => {
     return () => {
       document.removeEventListener('paste', handlePaste);
     };
-  }, [currentPage, updatePage, iterationsMap]);
+  }, [currentPage, updatePage, iterationsMap, resetCanvas]);
 
   // Check if we need to show the paste overlay
   const showPasteOverlay = (iterations.length === 0 || 
@@ -1182,44 +1280,85 @@ export const Canvas = () => {
     document.body.style.cursor = '';
   };
 
-  // Add event listeners for mouse move and mouse up on the document
+  // Update this useEffect to preserve iterations when dragging the canvas
   useEffect(() => {
-    const handleDocumentMouseMove = (e: globalThis.MouseEvent) => {
-      if (draggingDesign) {
-        handleDesignMouseMove(e as unknown as MouseEvent);
-      } else if (isDragging) {
-        handleCanvasMouseMove(e as unknown as MouseEvent);
-      }
-    };
-    
-    const handleDocumentMouseUp = () => {
-      if (draggingDesign) {
-        handleDesignMouseUp();
-      }
+    const handleMouseMove = (e: globalThis.MouseEvent) => {
       if (isDragging) {
-        handleCanvasMouseUp();
+        // Only update canvas position, don't touch iterations
+        const newX = canvasPosition.x + (e.clientX - dragStart.x) / canvasScale;
+        const newY = canvasPosition.y + (e.clientY - dragStart.y) / canvasScale;
+        
+        setCanvasPosition({ x: newX, y: newY });
+        setDragStart({ x: e.clientX, y: e.clientY });
+        
+        // Save position for the current page
+        if (currentPage) {
+          setPageCanvasPositions(prev => ({
+            ...prev,
+            [currentPage.id]: { x: newX, y: newY, scale: canvasScale }
+          }));
+        }
+      } else if (draggingDesign && currentPage) {
+        e.preventDefault();
+        
+        // Move just the design, not affecting the entire canvas or other designs
+        const currentIterations = [...(iterationsMap[currentPage.id] || [])];
+        const designIndex = currentIterations.findIndex(it => it.id === draggingDesign);
+        
+        if (designIndex !== -1) {
+          const deltaX = (e.clientX - designDragStart.x) / canvasScale;
+          const deltaY = (e.clientY - designDragStart.y) / canvasScale;
+          
+          // Update the position of the dragged design
+          const updatedDesign = {
+            ...currentIterations[designIndex],
+            position: {
+              x: (currentIterations[designIndex].position?.x || 0) + deltaX,
+              y: (currentIterations[designIndex].position?.y || 0) + deltaY
+            }
+          };
+          
+          // Update the iterations with the new position
+          currentIterations[designIndex] = updatedDesign;
+          
+          // Update iterations state
+          setIterationsMap(prev => ({
+            ...prev,
+            [currentPage.id]: currentIterations
+          }));
+          
+          // Update selected iteration if it's the one being dragged
+          if (selectedIteration && selectedIteration.id === draggingDesign) {
+            setSelectedIteration(updatedDesign);
+          }
+          
+          // Update drag start position
+          setDesignDragStart({ x: e.clientX, y: e.clientY });
+        }
       }
     };
     
-    // Add event listeners to the document
-    document.addEventListener('mousemove', handleDocumentMouseMove);
-    document.addEventListener('mouseup', handleDocumentMouseUp);
+    const handleMouseUp = () => {
+      // When releasing the mouse, just end the drag operations
+      // Don't reset any iterations or images
+      if (isDragging) {
+        setIsDragging(false);
+      }
+      
+      if (draggingDesign) {
+        setDraggingDesign(null);
+      }
+    };
     
-    // Clean up
+    // Add global event listeners
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    
     return () => {
-      document.removeEventListener('mousemove', handleDocumentMouseMove);
-      document.removeEventListener('mouseup', handleDocumentMouseUp);
-      
-      // Clear any pending timers
-      if (handleDesignMouseMove.debounceTimer) {
-        clearTimeout(handleDesignMouseMove.debounceTimer);
-        handleDesignMouseMove.debounceTimer = null;
-      }
-      
-      // Reset cursor if needed
-      document.body.style.cursor = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [draggingDesign, isDragging, handleDesignMouseMove, handleCanvasMouseMove, handleDesignMouseUp, handleCanvasMouseUp]);
+  }, [isDragging, dragStart, canvasPosition, canvasScale, draggingDesign, designDragStart, currentPage, iterationsMap, selectedIteration]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
